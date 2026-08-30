@@ -1,5 +1,5 @@
 using System.CommandLine;
-using System.Reflection;
+using QualityGate.Domain;
 
 namespace QualityGate.Commands;
 
@@ -11,7 +11,7 @@ public static class VersionCommand
 
         command.SetHandler(() =>
         {
-            var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.0.0";
+            var version = ToolVersion.Current;
             Console.WriteLine($"QualityGate {version}");
         });
 

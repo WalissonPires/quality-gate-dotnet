@@ -1,0 +1,196 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Versão da Release (ex: 1.0.0 ou 1.0.0-rc.1). Se omitido, usa a tag Git.'
+        required: false
+        type: string
+      prerelease:
+        description: 'Marcar como pré-release?'
+        required: false
+        type: boolean
+        default: false
+      draft:
+        description: 'Criar como rascunho (draft)?'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    name: Test and Resolve Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve_version.outputs.version }}
+      tag_name: ${{ steps.resolve_version.outputs.tag_name }}
+      is_prerelease: ${{ steps.resolve_version.outputs.is_prerelease }}
+      is_draft: ${{ steps.resolve_version.outputs.is_draft }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore QualityGate.sln
+
+      - name: Run unit tests
+        run: dotnet test QualityGate.sln --configuration Release --verbosity normal
+
+      - name: Resolve Release Version
+        id: resolve_version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            RAW_VERSION="${{ github.event.inputs.version }}"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            RAW_VERSION="${GITHUB_REF#refs/tags/}"
+          else
+            echo "Erro: Nenhuma tag ou versão informada." >&2
+            exit 1
+          fi
+
+          # Remove o prefixo 'v' se presente para compatibilidade SemVer do .NET
+          CLEAN_VERSION="${RAW_VERSION#v}"
+          TAG_NAME="v${CLEAN_VERSION}"
+
+          # Determina se é pré-release
+          if [ "${{ github.event.inputs.prerelease }}" = "true" ] || [[ "$CLEAN_VERSION" == *"-"* ]]; then
+            IS_PRERELEASE="true"
+          else
+            IS_PRERELEASE="false"
+          fi
+
+          IS_DRAFT="${{ github.event.inputs.draft || 'false' }}"
+
+          echo "version=${CLEAN_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag_name=${TAG_NAME}" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=${IS_PRERELEASE}" >> "$GITHUB_OUTPUT"
+          echo "is_draft=${IS_DRAFT}" >> "$GITHUB_OUTPUT"
+
+          echo "Release Version: ${CLEAN_VERSION}"
+          echo "Release Tag: ${TAG_NAME}"
+          echo "Prerelease: ${IS_PRERELEASE}"
+          echo "Draft: ${IS_DRAFT}"
+
+  build-executables:
+    name: Build (${{ matrix.rid }})
+    needs: validate
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            binary_name: qualitygate
+            archive_type: tar.gz
+          - rid: linux-arm64
+            binary_name: qualitygate
+            archive_type: tar.gz
+          - rid: win-x64
+            binary_name: qualitygate.exe
+            archive_type: zip
+          - rid: osx-x64
+            binary_name: qualitygate
+            archive_type: tar.gz
+          - rid: osx-arm64
+            binary_name: qualitygate
+            archive_type: tar.gz
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish CLI executable
+        run: |
+          dotnet publish src/QualityGate/QualityGate.csproj \
+            --configuration Release \
+            --runtime ${{ matrix.rid }} \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -p:DebugType=none \
+            -p:DebugSymbols=false \
+            -p:Version=${{ needs.validate.outputs.version }} \
+            -p:InformationalVersion=${{ needs.validate.outputs.version }} \
+            --output ./publish
+
+      - name: Package artifacts
+        id: package
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          RID="${{ matrix.rid }}"
+          ARCHIVE_NAME="qualitygate-v${VERSION}-${RID}.${{ matrix.archive_type }}"
+
+          mkdir -p ./dist
+
+          if [ "${{ matrix.archive_type }}" = "tar.gz" ]; then
+            chmod +x ./publish/${{ matrix.binary_name }}
+            tar -czvf "./dist/${ARCHIVE_NAME}" -C ./publish "${{ matrix.binary_name }}"
+          else
+            sudo apt-get update && sudo apt-get install -y zip
+            (cd ./publish && zip -9 "../dist/${ARCHIVE_NAME}" "${{ matrix.binary_name }}")
+          fi
+
+          echo "archive_name=${ARCHIVE_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-${{ matrix.rid }}
+          path: ./dist/*
+          retention-days: 1
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [validate, build-executables]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all built artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./downloaded-artifacts
+          pattern: artifacts-*
+          merge-multiple: true
+
+      - name: Generate Checksums (SHA-256)
+        run: |
+          cd ./downloaded-artifacts
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.validate.outputs.tag_name }}
+          name: Release ${{ needs.validate.outputs.tag_name }}
+          draft: ${{ needs.validate.outputs.is_draft == 'true' }}
+          prerelease: ${{ needs.validate.outputs.is_prerelease == 'true' }}
+          generate_release_notes: true
+          files: |
+            ./downloaded-artifacts/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

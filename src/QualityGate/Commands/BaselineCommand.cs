@@ -246,7 +246,7 @@ public static class BaselineCommand
                     TotalLines: featureTotalLines);
             }
 
-            var toolVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.0.0";
+            var toolVersion = ToolVersion.Current;
             var baseline = new QualityBaseline
             {
                 SchemaVersion = 1,

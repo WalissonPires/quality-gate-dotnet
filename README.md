@@ -286,3 +286,42 @@ jobs:
           git add .tools/quality-gate/baseline.json
           git diff --staged --quiet || (git commit -m "chore(quality): ratchet update baseline metrics [skip ci]" && git push)
 ```
+
+### 3. Pipeline de CI e Release de Executáveis CLI (`.github/workflows/release.yml`)
+
+O projeto conta com pipelines automatizados para testes contínuos e geração de binários executáveis standalone (single-file self-contained):
+
+#### Matriz de Plataformas Suportadas:
+- **Linux x64**: `qualitygate-v<version>-linux-x64.tar.gz` (ELF)
+- **Linux ARM64**: `qualitygate-v<version>-linux-arm64.tar.gz` (ELF aarch64)
+- **Windows x64**: `qualitygate-v<version>-win-x64.zip` (`qualitygate.exe`)
+- **macOS x64**: `qualitygate-v<version>-osx-x64.tar.gz` (Intel)
+- **macOS ARM64**: `qualitygate-v<version>-osx-arm64.tar.gz` (Apple Silicon)
+
+#### Controle de Versão e Publicação de Release:
+
+1. **Por Git Tag (Recomendado)**:
+   ```sh
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+   O workflow `.github/workflows/release.yml` é acionado automaticamente, valida todos os testes, compila os executáveis com a versão embutida, gera os checksums SHA-256 e cria a **GitHub Release** com as notas de versão.
+
+2. **Manual (GitHub Actions UI)**:
+   Acesse a aba **Actions** > **Release** > **Run workflow** e informe a versão desejada (ex: `1.0.0` ou `1.0.0-rc.1`).
+
+#### Download e Uso do Executável da Release:
+
+Após o término do pipeline, os binários estarão disponíveis para download na página de **Releases** do repositório no GitHub:
+
+```sh
+# Exemplo no Linux:
+tar -xzvf qualitygate-v1.0.0-linux-x64.tar.gz
+./qualitygate version
+./qualitygate check --diff
+
+# Exemplo no Windows (PowerShell):
+Expand-Archive qualitygate-v1.0.0-win-x64.zip
+.\qualitygate.exe version
+.\qualitygate.exe check --diff
+```
