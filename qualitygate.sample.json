@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "changedCode": {
+    "lineCoverage": 80,
+    "branchCoverage": 70,
+    "maxCyclomaticComplexity": 10,
+    "maxMethodLines": 40,
+    "maxClassLines": 300,
+    "newWarnings": 0
+  },
+  "global": {
+    "lineCoverage": null,
+    "branchCoverage": null
+  },
+  "mutation": {
+    "enabled": false,
+    "minimumScore": 70
+  },
+  "execution": {
+    "failFast": false,
+    "unitTests": true,
+    "integrationTests": false,
+    "e2eTests": false,
+    "processTimeoutSeconds": 300
+  },
+  "architecture": {
+    "rules": [
+      {
+        "name": "DomainIsolation",
+        "source": "*.Domain",
+        "forbiddenDependencies": [
+          "Microsoft.EntityFrameworkCore",
+          "Microsoft.AspNetCore",
+          "*.Infrastructure",
+          "*.API"
+        ],
+        "strict": true
+      },
+      {
+        "name": "ApplicationIsolation",
+        "source": "*.Application",
+        "forbiddenDependencies": [
+          "Microsoft.EntityFrameworkCore",
+          "*.Infrastructure",
+          "*.API"
+        ],
+        "strict": true
+      }
+    ]
+  }
+}

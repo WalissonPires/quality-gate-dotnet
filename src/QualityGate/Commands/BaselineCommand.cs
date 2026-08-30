@@ -25,7 +25,7 @@ public static class BaselineCommand
         var baselineCommand = new Command("baseline", "Manage quality baselines for ratchet verification");
         var recordCommand = new Command("record", "Measure and record current repository quality metrics to baseline file");
 
-        var outputOption = new Option<string>("--output", () => ".tools/quality-gate/baseline.json", "Output path for baseline JSON file");
+        var outputOption = new Option<string>("--output", () => ".qualitygate/baseline.json", "Output path for baseline JSON file");
         var projectOption = new Option<string?>("--project", "Evaluate and record baseline for a specific .csproj project");
         var configOption = new Option<string>("--config", () => "qualitygate.json", "Path to configuration file");
         var verboseOption = new Option<bool>("--verbose", "Enable detailed diagnostic output");
@@ -37,7 +37,7 @@ public static class BaselineCommand
 
         recordCommand.SetHandler(async (context) =>
         {
-            var output = context.ParseResult.GetValueForOption(outputOption) ?? ".tools/quality-gate/baseline.json";
+            var output = context.ParseResult.GetValueForOption(outputOption) ?? ".qualitygate/baseline.json";
             var project = context.ParseResult.GetValueForOption(projectOption);
             var config = context.ParseResult.GetValueForOption(configOption) ?? "qualitygate.json";
             var verbose = context.ParseResult.GetValueForOption(verboseOption);
@@ -102,9 +102,9 @@ public static class BaselineCommand
             }
             else
             {
-                var rootConfig = Path.Combine(workingDir, ".tools", "quality-gate", "qualitygate.json");
-                options = File.Exists(rootConfig)
-                    ? await ConfigurationLoader.LoadAsync(rootConfig, cancellationToken).ConfigureAwait(false)
+                var dotQualityGateConfig = Path.Combine(workingDir, ".qualitygate", "qualitygate.json");
+                options = File.Exists(dotQualityGateConfig)
+                    ? await ConfigurationLoader.LoadAsync(dotQualityGateConfig, cancellationToken).ConfigureAwait(false)
                     : new QualityGateOptions();
             }
 
@@ -135,7 +135,7 @@ public static class BaselineCommand
             }
 
             // 5. Run Tests and Collect Coverage
-            var tempArtifactDir = Path.Combine(workingDir, ".tools", "quality-gate", ".artifacts", $"baseline-{Guid.NewGuid():N}");
+            var tempArtifactDir = Path.Combine(workingDir, ".qualitygate", "artifacts", $"baseline-{Guid.NewGuid():N}");
             Directory.CreateDirectory(tempArtifactDir);
 
             int totalTests = 0;

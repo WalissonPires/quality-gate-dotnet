@@ -5,7 +5,7 @@ namespace QualityGate.Configuration;
 
 public static class BaselineLoader
 {
-    private const string DefaultRelativePath = ".tools/quality-gate/baseline.json";
+    private const string DefaultRelativePath = ".qualitygate/baseline.json";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

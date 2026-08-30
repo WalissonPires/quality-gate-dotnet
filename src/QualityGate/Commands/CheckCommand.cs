@@ -35,7 +35,7 @@ public static class CheckCommand
         var verboseOption = new Option<bool>("--verbose", "Enable detailed diagnostic output");
         var configOption = new Option<string>("--config", () => "qualitygate.json", "Path to configuration file");
         var ratchetOption = new Option<bool>("--ratchet", "Enable ratchet mode to prevent quality regression against baseline");
-        var baselineOption = new Option<string?>("--baseline", "Path to baseline JSON file for ratchet comparison (default: .tools/quality-gate/baseline.json)");
+        var baselineOption = new Option<string?>("--baseline", "Path to baseline JSON file for ratchet comparison (default: .qualitygate/baseline.json)");
 
         command.AddOption(diffOption);
         command.AddOption(namespaceOption);
@@ -127,9 +127,9 @@ public static class CheckCommand
             }
             else
             {
-                var rootConfig = Path.Combine(workingDir, ".tools", "quality-gate", "qualitygate.json");
-                options = File.Exists(rootConfig)
-                    ? await ConfigurationLoader.LoadAsync(rootConfig, cancellationToken).ConfigureAwait(false)
+                var dotQualityGateConfig = Path.Combine(workingDir, ".qualitygate", "qualitygate.json");
+                options = File.Exists(dotQualityGateConfig)
+                    ? await ConfigurationLoader.LoadAsync(dotQualityGateConfig, cancellationToken).ConfigureAwait(false)
                     : new QualityGateOptions();
             }
 
@@ -211,7 +211,7 @@ public static class CheckCommand
 
             // Per-run setup
             var runId = Guid.NewGuid().ToString("N");
-            var artifactDir = Path.Combine(workingDir, ".tools", "quality-gate", ".artifacts", runId);
+            var artifactDir = Path.Combine(workingDir, ".qualitygate", "artifacts", runId);
             Directory.CreateDirectory(artifactDir);
             var reportJsonPath = Path.Combine(artifactDir, "report.json");
 

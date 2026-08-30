@@ -1,327 +1,323 @@
-# Wamage Quality Gate
+# Quality Gate CLI
 
-Automated, multi-gate code quality orchestrator for the Wamage backend in .NET 10.
+Orquestrador automatizado de qualidade de código com múltiplos gates para aplicações .NET 10.
 
-## Overview
+## Visão Geral
 
-Quality Gate executes a pipeline of 7 quality checks:
-1. **Build Gate**: Compiles affected projects with warnings-as-errors.
-2. **Test Gate**: Executes tests for affected features and validates results.
-3. **Coverage Gate**: Enforces changed-code and global line/branch coverage thresholds.
-4. **Complexity Gate**: Analyzes cyclomatic complexity, method lines, and class lines using Roslyn AST.
-5. **Static Analysis Gate**: Detects new compiler and analyzer warnings.
-6. **Architecture Gate**: Validates layering and forbidden dependency rules per architectural boundary.
-7. **Mutation Gate**: Orchestrates Stryker.NET mutation testing.
+O Quality Gate executa um pipeline automatizado com 7 verificações de qualidade:
+1. **Gate de Compilação (`Build Gate`)**: Compila os projetos afetados tratando avisos como erros (`TreatWarningsAsErrors`).
+2. **Gate de Testes (`Test Gate`)**: Executa a suíte de testes dos módulos alterados e valida os resultados.
+3. **Gate de Cobertura (`Coverage Gate`)**: Aplica limiares mínimos de cobertura de linhas e branches (geral e para código alterado).
+4. **Gate de Complexidade (`Complexity Gate`)**: Analisa complexidade ciclomática, linhas por método e linhas por classe via AST do Roslyn.
+5. **Gate de Análise Estática (`Static Analysis Gate`)**: Detecta novos avisos do compilador e analisadores de código.
+6. **Gate de Arquitetura (`Architecture Gate`)**: Valida regras de arquitetura em camadas e dependências proibidas entre módulos.
+7. **Gate de Mutação (`Mutation Gate`)**: Orquestra testes de mutação com Stryker.NET.
+
 ---
 
-## Pré-requisitos e Instalação de Dependências
+## Instalação e Download da CLI
 
-### 1. Dependências Obrigatórias
+O Quality Gate é distribuído como um executável autônomo em arquivo único (*single-file*), portanto não requer instalação prévia do runtime do .NET para sua execução.
 
-Para executar os gates padrão (**Build**, **Test**, **Coverage**, **Complexity**, **Static Analysis**, **Architecture**):
+### 1. Baixar a Versão no GitHub
+Acesse a página de **[Releases](../../releases)** e baixe o pacote correspondente ao seu sistema operacional e arquitetura:
 
+| Plataforma | Pacote | Executável |
+|---|---|---|
+| **Linux (x64)** | `qualitygate-v<versao>-linux-x64.tar.gz` | `qualitygate` |
+| **Linux (ARM64)** | `qualitygate-v<versao>-linux-arm64.tar.gz` | `qualitygate` |
+| **Windows (x64)** | `qualitygate-v<versao>-win-x64.zip` | `qualitygate.exe` |
+| **macOS (Intel)** | `qualitygate-v<versao>-osx-x64.tar.gz` | `qualitygate` |
+| **macOS (Apple Silicon)** | `qualitygate-v<versao>-osx-arm64.tar.gz` | `qualitygate` |
+
+### 2. Extração e Execução
+
+**No Linux ou macOS:**
+```sh
+tar -xzvf qualitygate-v1.0.0-linux-x64.tar.gz
+chmod +x qualitygate
+./qualitygate version
+```
+
+**No Windows (PowerShell):**
+```powershell
+Expand-Archive qualitygate-v1.0.0-win-x64.zip
+.\qualitygate.exe version
+```
+
+> **Dica:** Adicione a pasta com o executável à variável de ambiente `PATH` para poder chamá-lo diretamente como `qualitygate` a partir de qualquer diretório.
+
+---
+
+## Pré-requisitos de Uso
+
+Para que a ferramenta consiga compilar e inspecionar o projeto .NET alvo:
+
+### 1. Obrigatórios
 - **.NET 10 SDK** (versão 10.0 ou superior):
   ```sh
   dotnet --version
   ```
-- **Git CLI** (disponível no PATH para resolução de diff e commits):
+- **Git CLI** (disponível no PATH para resolução de diferenças e commits):
   ```sh
   git --version
   ```
 
-### 2. Dependências Opcionais (por Gate)
-
-#### Gate de Mutação (`MutationGate`)
-Para executar testes de mutação com o Stryker.NET:
-```sh
-dotnet tool install --global dotnet-stryker
-```
-*Verificação*: `dotnet stryker --help` ou `dotnet-stryker --help`
-
-#### Relatórios HTML de Cobertura (Opcional)
-Caso deseje gerar relatórios visuais HTML a partir dos arquivos Cobertura XML:
-```sh
-dotnet tool install --global dotnet-reportgenerator-globaltool
-```
+### 2. Opcionais (por Gate)
+- **Gate de Mutação (`MutationGate`)**:
+  ```sh
+  dotnet tool install --global dotnet-stryker
+  ```
+- **Relatórios Visuais HTML de Cobertura**:
+  ```sh
+  dotnet tool install --global dotnet-reportgenerator-globaltool
+  ```
 
 ---
 
-## Instalação e Restauração do Quality Gate
+## Como Usar
 
-Na raiz do repositório, compile e restaure o Quality Gate:
+Execute os comandos a partir da pasta raiz do repositório .NET que você deseja analisar.
 
-```sh
-dotnet restore .tools/quality-gate/QualityGate.sln
-dotnet build .tools/quality-gate/QualityGate.sln --configuration Release
-```
-
----
-
-## CLI Usage
-
-### Running Quality Checks
+### Verificações de Qualidade (`check`)
 
 ```sh
-# Diff scope (default in git repo) - checks only changed files vs base commit
-dotnet run --project .tools/quality-gate/src/QualityGate -- check --diff
+# Modo padrão em repositório Git: avalia apenas o código alterado em relação ao commit base
+qualitygate check --diff
 
-# Specific namespace
-dotnet run --project .tools/quality-gate/src/QualityGate -- check --namespace Wamage.Features.Persons
+# Repositório completo
+qualitygate check --repository
 
-# Specific project
-dotnet run --project .tools/quality-gate/src/QualityGate -- check --project backend/Wamage.csproj
+# Projeto específico
+qualitygate check --project src/MeuProjeto/MeuProjeto.csproj
 
-# Full repository check
-dotnet run --project .tools/quality-gate/src/QualityGate -- check --repository
+# Namespace específico
+qualitygate check --namespace MeuApp.Features.Pedidos
 
-# Output JSON report
-dotnet run --project .tools/quality-gate/src/QualityGate -- check --diff --format json
+# Saída em formato JSON
+qualitygate check --diff --format json
 
-# Both console and JSON output (writes to .artifacts/<runId>/report.json)
-dotnet run --project .tools/quality-gate/src/QualityGate -- check --diff --format both
+# Saída dupla: console e relatório JSON gravado em .qualitygate/artifacts/<runId>/report.json
+qualitygate check --diff --format both
 
-# Skip specific gates
-dotnet run --project .tools/quality-gate/src/QualityGate -- check --diff --skip mutation,staticanalysis
+# Pular gates específicos
+qualitygate check --diff --skip mutation,staticanalysis
 
-# Only run specific gates
-dotnet run --project .tools/quality-gate/src/QualityGate -- check --diff --only build,test,coverage
+# Executar exclusivamente gates selecionados
+qualitygate check --diff --only build,test,coverage
 
-# Run mutation testing on a specific feature namespace
-dotnet run --project .tools/quality-gate/src/QualityGate -- check --namespace Wamage.Features.Persons --only mutation
+# Executar testes de mutação apenas no código alterado (modo Diff)
+qualitygate check --diff --only mutation
 
-# Run mutation testing only on changed code (Diff mode)
-dotnet run --project .tools/quality-gate/src/QualityGate -- check --diff --only mutation
-# Execute quality check with ratchet verification against main baseline
-dotnet run --project .tools/quality-gate/src/QualityGate -- check --diff --ratchet --baseline .tools/quality-gate/baseline.json
+# Executar com verificação em catraca (ratchet) contra a baseline gravada
+qualitygate check --diff --ratchet --baseline .qualitygate/baseline.json
 
-# Fail fast on first error
-dotnet run --project .tools/quality-gate/src/QualityGate -- check --diff --fail-fast
+# Interromper imediatamente no primeiro gate que reprovar
+qualitygate check --diff --fail-fast
 
-# Enable verbose diagnostic output
-dotnet run --project .tools/quality-gate/src/QualityGate -- check --diff --verbose
+# Saída detalhada de diagnóstico técnico
+qualitygate check --diff --verbose
 ```
 
-### Sistema de Catraca (Quality Ratchet)
+### Sistema de Catraca (Ratchet)
 
-O modo de catraca (`--ratchet`) garante que métricas de código (cobertura, avisos do compilador, violações arquiteturais e complexidade) **nunca regridam**:
-- **Modo Diff**: Mapeia as features alteradas e garante que a cobertura da feature e violações arquiteturais não piorem em relação à baseline.
-- **Opção `--baseline <path>`**: Permite sobrescrever o caminho do arquivo `baseline.json` (por exemplo, ao comparar contra uma baseline extraída da branch `main` em CI).
+O modo de catraca (`--ratchet`) assegura que a qualidade do código **nunca regrida**:
+- **Modo Diff**: Mapeia os arquivos modificados e garante que a cobertura de código e as violações de arquitetura não piorem em relação à baseline gravada.
+- **Opção `--baseline <caminho>`**: Permite apontar o caminho do arquivo de baseline (o padrão adotado é `.qualitygate/baseline.json`).
 
 ### Gravação de Nova Baseline (`baseline record`)
 
-Gera um novo snapshot consolidado das métricas globais e por feature:
+Para registrar o estado atual de métricas do repositório como o novo patamar mínimo de qualidade:
 
 ```sh
-dotnet run --project .tools/quality-gate/src/QualityGate -- baseline record --output .tools/quality-gate/baseline.json
+qualitygate baseline record --output .qualitygate/baseline.json
 ```
 
-### CLI Options (`check` command)
+### Opções da Linha de Comando (`check`)
 
-| Option | Type | Default | Description |
+| Opção | Tipo | Padrão | Descrição |
 |---|---|---|---|
-| `--diff` | Flag | `true` (in git) | Evaluate only changed code |
-| `--namespace <ns>` | String | — | Evaluate a specific namespace |
-| `--project <path>` | String | — | Evaluate a specific `.csproj` project |
-| `--repository` | Flag | — | Evaluate the entire repository |
-| `--base <ref>` | String | `HEAD~1` / merge-base | Git base reference for diff comparison |
-| `--format <fmt>` | Enum | `console` | Output format: `console`, `json`, `both` |
-| `--skip <gates>` | List | — | Gates to skip (comma-separated: `build,test,coverage,complexity,staticanalysis,architecture,mutation`) |
-| `--only <gates>` | List | — | Only run specified gates (comma-separated) |
-| `--fail-fast` | Flag | `false` | Stop execution immediately after the first failing gate |
-| `--verbose` | Flag | `false` | Enable detailed diagnostic output (SDK versions, paths, timings, target resolution) |
-| `--config <path>` | String | `qualitygate.json` | Path to custom configuration file |
-| `--ratchet` | Flag | `false` | Enable quality ratchet verification against baseline |
-| `--baseline <path>` | String | `.tools/quality-gate/baseline.json` | Path to baseline JSON file for ratchet comparison |
+| `--diff` | Sinalizador | `true` (em Git) | Avalia exclusivamente os arquivos alterados |
+| `--repository` | Sinalizador | — | Avalia todo o repositório |
+| `--project <caminho>` | Texto | — | Avalia um projeto `.csproj` específico |
+| `--namespace <ns>` | Texto | — | Avalia um namespace específico |
+| `--base <ref>` | Texto | `HEAD~1` / merge-base | Referência Git base para comparação de diff |
+| `--format <formato>` | Enumeração | `console` | Formato de saída: `console`, `json` ou `both` |
+| `--skip <gates>` | Lista | — | Gates ignorados (`build,test,coverage,complexity,staticanalysis,architecture,mutation`) |
+| `--only <gates>` | Lista | — | Executa apenas os gates informados |
+| `--fail-fast` | Sinalizador | `false` | Para a execução logo após a primeira falha |
+| `--verbose` | Sinalizador | `false` | Exibe detalhes de diagnóstico (caminhos, tempos, resoluções) |
+| `--config <caminho>` | Texto | `qualitygate.json` | Caminho para arquivo de configuração personalizado |
+| `--ratchet` | Sinalizador | `false` | Habilita verificação em catraca contra a baseline |
+| `--baseline <caminho>` | Texto | `.qualitygate/baseline.json` | Caminho do arquivo de baseline para verificação |
 
-### Version Command
-```sh
-dotnet run --project .tools/quality-gate/src/QualityGate -- version
-```
+### Códigos de Saída da CLI
 
----
-
-## Exit Codes
-
-| Code | Name | Description |
+| Código | Identificador | Descrição |
 |---|---|---|
-| `0` | Success | All evaluated quality gates passed |
-| `1` | QualityFailure | One or more gates failed quality thresholds |
-| `2` | ConfigurationError | Invalid CLI arguments, conflicting options, or malformed config |
-| `3` | InfrastructureError | External tool failure (.NET SDK, git, or tool crash) |
-| `4` | ScopeError | Target scope could not be resolved |
-| `5` | InternalError | Unexpected internal exception |
+| `0` | `Success` | Todos os gates avaliados foram aprovados |
+| `1` | `QualityFailure` | Um ou mais gates reprovaram por não atingir os limiares |
+| `2` | `ConfigurationError` | Parâmetros inválidos ou arquivo de configuração malformado |
+| `3` | `InfrastructureError` | Falha de ferramenta externa (.NET SDK, Git ou falha de processo) |
+| `4` | `ScopeError` | O escopo alvo da análise não pôde ser resolvido |
+| `5` | `InternalError` | Ocorreu uma exceção interna não tratada |
 
 ---
 
-## Configuration (`qualitygate.json`)
+## Configuração do Projeto (`qualitygate.json`)
 
-The default configuration file is located at `.tools/quality-gate/qualitygate.json`:
+### Ordem de Busca da Configuração
+Ao iniciar, o Quality Gate busca o arquivo de regras na seguinte ordem:
+1. Caminho explícito passado pelo parâmetro `--config <caminho>`
+2. Raiz do projeto alvo: `./qualitygate.json`
+3. Pasta padrão da ferramenta: `./.qualitygate/qualitygate.json`
+4. Se nenhum arquivo for localizado, adota os valores padrão embutidos.
 
-```json
-{
-  "version": 1,
-  "changedCode": {
-    "lineCoverage": 80,
-    "branchCoverage": 70,
-    "maxCyclomaticComplexity": 10,
-    "maxMethodLines": 40,
-    "maxClassLines": 300,
-    "newWarnings": 0
-  },
-  "global": {
-    "lineCoverage": null,
-    "branchCoverage": null
-  },
-  "mutation": {
-    "enabled": false,
-    "minimumScore": 70
-  },
-  "execution": {
-    "failFast": false,
-    "unitTests": true,
-    "integrationTests": false,
-    "e2eTests": false,
-    "processTimeoutSeconds": 300
-  },
-  "architecture": {
-    "rules": [
-      {
-        "name": "DomainIsolation",
-        "source": "Wamage.Features.*.Domain",
-        "forbiddenDependencies": [
-          "Microsoft.EntityFrameworkCore",
-          "Microsoft.AspNetCore",
-          "MediatR",
-          "Wamage.Features.*.Infrastructure",
-          "Wamage.Features.*.API"
-        ],
-        "strict": true
-      },
-      {
-        "name": "ApplicationIsolation",
-        "source": "Wamage.Features.*.Application",
-        "forbiddenDependencies": [
-          "Microsoft.EntityFrameworkCore",
-          "Wamage.Features.*.Infrastructure",
-          "Wamage.Features.*.API",
-          "Wamage.Shared.Database.AppDbContext"
-        ],
-        "strict": true
-      },
-      {
-        "name": "ApiIsolation",
-        "source": "Wamage.Features.*.API",
-        "forbiddenDependencies": [
-          "Wamage.Features.*.Infrastructure",
-          "Wamage.Shared.Database.AppDbContext"
-        ],
-        "strict": true
-      }
-    ]
-  }
-}
+### Modelo de Exemplo
+Para configurar o seu projeto, utilize o modelo de exemplo `qualitygate.sample.json` presente neste repositório. Basta copiá-lo para o seu projeto:
+
+```sh
+cp qualitygate.sample.json meu-projeto/.qualitygate/qualitygate.json
 ```
-## CI / GitHub Actions Integration
 
-### 1. PR Quality Ratchet (`.github/workflows/pr-quality-ratchet.yml`)
+### Diretório de Artefatos Gerados
+Todos os relatórios (`report.json`) e saídas intermediárias de cobertura gerados pela CLI são gravados exclusivamente em:
+```
+.qualitygate/artifacts/<runId>/
+```
+Adicione a pasta `.qualitygate/artifacts/` ao arquivo `.gitignore` do seu projeto.
 
-Compara o PR contra a baseline da branch `main`:
+---
+
+## Integração Contínua em Projetos Clientes (GitHub Actions)
+
+Abaixo estão exemplos de como integrar a CLI do Quality Gate nos fluxos de trabalho de qualquer repositório .NET cliente:
+
+### 1. Verificação de Pull Request com Catraca (`.github/workflows/qualidade.yml`)
 
 ```yaml
-name: PR Quality Ratchet
+name: Quality Gate
 
 on:
   pull_request:
     branches: [ main, master ]
 
 jobs:
-  quality-ratchet:
+  verificacao:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Obter código do repositório
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup .NET
+      - name: Configurar .NET 10 SDK
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
 
-      - name: Extrair Baseline da Main
+      - name: Baixar CLI do Quality Gate
+        run: |
+          gh release download --repo <org>/quality-gate-dotnet --pattern "qualitygate-*-linux-x64.tar.gz"
+          tar -xzvf qualitygate-*-linux-x64.tar.gz
+          chmod +x qualitygate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extrair Baseline da Branch Principal
         run: |
           mkdir -p /tmp/ratchet
-          git show origin/main:.tools/quality-gate/baseline.json > /tmp/ratchet/main-baseline.json 2>/dev/null || true
+          git show origin/main:.qualitygate/baseline.json > /tmp/ratchet/main-baseline.json 2>/dev/null || true
 
-      - name: Run Quality Gate with Ratchet
+      - name: Executar Verificação de Qualidade
         run: |
-          dotnet run --project .tools/quality-gate/src/QualityGate -- \
-            check --diff --ratchet --baseline /tmp/ratchet/main-baseline.json --format both
+          ./qualitygate check --diff --ratchet --baseline /tmp/ratchet/main-baseline.json --format both
 ```
 
-### 2. Atualização Automática da Baseline (`.github/workflows/update-quality-baseline.yml`)
-
-Grava o novo patamar de métricas após merges na branch `main`:
+### 2. Atualização Automática da Baseline no Merge (`.github/workflows/atualizar-baseline.yml`)
 
 ```yaml
-name: Update Quality Baseline
+name: Atualizar Baseline de Qualidade
 
 on:
   push:
     branches: [ main ]
 
 jobs:
-  update-baseline:
+  gravar-baseline:
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - name: Obter código do repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar .NET 10 SDK
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - run: |
-          dotnet run --project .tools/quality-gate/src/QualityGate -- baseline record --output .tools/quality-gate/baseline.json
+
+      - name: Baixar CLI do Quality Gate
+        run: |
+          gh release download --repo <org>/quality-gate-dotnet --pattern "qualitygate-*-linux-x64.tar.gz"
+          tar -xzvf qualitygate-*-linux-x64.tar.gz
+          chmod +x qualitygate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Gravar e Registrar Nova Baseline
+        run: |
+          ./qualitygate baseline record --output .qualitygate/baseline.json
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .tools/quality-gate/baseline.json
-          git diff --staged --quiet || (git commit -m "chore(quality): ratchet update baseline metrics [skip ci]" && git push)
+          git add .qualitygate/baseline.json
+          git diff --staged --quiet || (git commit -m "chore(qualidade): atualizar baseline de metricas [skip ci]" && git push)
 ```
 
-### 3. Pipeline de CI e Release de Executáveis CLI (`.github/workflows/release.yml`)
+---
 
-O projeto conta com pipelines automatizados para testes contínuos e geração de binários executáveis standalone (single-file self-contained):
+## Desenvolvimento e Contribuição
 
-#### Matriz de Plataformas Suportadas:
-- **Linux x64**: `qualitygate-v<version>-linux-x64.tar.gz` (ELF)
-- **Linux ARM64**: `qualitygate-v<version>-linux-arm64.tar.gz` (ELF aarch64)
-- **Windows x64**: `qualitygate-v<version>-win-x64.zip` (`qualitygate.exe`)
-- **macOS x64**: `qualitygate-v<version>-osx-x64.tar.gz` (Intel)
-- **macOS ARM64**: `qualitygate-v<version>-osx-arm64.tar.gz` (Apple Silicon)
+Esta seção é destinada a desenvolvedores que queiram compilar, testar ou contribuir com o código-fonte deste projeto.
 
-#### Controle de Versão e Publicação de Release:
-
-1. **Por Git Tag (Recomendado)**:
-   ```sh
-   git tag v1.0.0
-   git push origin v1.0.0
-   ```
-   O workflow `.github/workflows/release.yml` é acionado automaticamente, valida todos os testes, compila os executáveis com a versão embutida, gera os checksums SHA-256 e cria a **GitHub Release** com as notas de versão.
-
-2. **Manual (GitHub Actions UI)**:
-   Acesse a aba **Actions** > **Release** > **Run workflow** e informe a versão desejada (ex: `1.0.0` ou `1.0.0-rc.1`).
-
-#### Download e Uso do Executável da Release:
-
-Após o término do pipeline, os binários estarão disponíveis para download na página de **Releases** do repositório no GitHub:
+### Compilação Local da Solução
 
 ```sh
-# Exemplo no Linux:
-tar -xzvf qualitygate-v1.0.0-linux-x64.tar.gz
-./qualitygate version
-./qualitygate check --diff
-
-# Exemplo no Windows (PowerShell):
-Expand-Archive qualitygate-v1.0.0-win-x64.zip
-.\qualitygate.exe version
-.\qualitygate.exe check --diff
+dotnet restore QualityGate.sln
+dotnet build QualityGate.sln --configuration Release
 ```
+
+### Execução da Suíte de Testes Automatizados
+
+```sh
+dotnet test QualityGate.sln --configuration Release
+```
+
+### Executar a CLI em Modo de Desenvolvimento
+
+Durante o desenvolvimento, você pode rodar a CLI diretamente sem precisar gerar o executável publicado:
+
+```sh
+dotnet run --project src/QualityGate -- check --diff
+dotnet run --project src/QualityGate -- version
+```
+
+### Pipelines de CI/CD do Repositório
+
+O repositório conta com duas automações via GitHub Actions:
+- **`CI - Build and Test` (`.github/workflows/ci.yml`)**: Restaura, compila com avisos como erros e roda os 106 testes unitários a cada Pull Request e push na branch principal.
+- **`Release` (`.github/workflows/release.yml`)**: Gera executáveis autônomos *single-file* para as 5 plataformas (Linux x64/ARM64, Windows x64, macOS Intel/Apple Silicon), calcula os resumos de integridade SHA-256 e cria a Release no GitHub.
+
+### Como Publicar uma Nova Versão da Ferramenta
+
+Para gerar e publicar uma nova release com versionamento semântico automático:
+
+```sh
+# 1. Crie uma tag semântica (ex: v1.0.0, v1.1.0)
+git tag v1.0.0
+
+# 2. Envie a tag para o repositório remoto no GitHub
+git push origin v1.0.0
+```
+
+O pipeline de release iniciará automaticamente, executará todos os testes e disponibilizará a nova versão com todos os binários compactados prontos para download.

@@ -11,7 +11,7 @@ public sealed class BaselineLoaderTests
     public void ResolvePath_WithNull_ReturnsDefaultRelativePath()
     {
         var resolved = BaselineLoader.ResolvePath(null, "C:/repos/app");
-        resolved.Replace('\\', '/').Should().EndWith(".tools/quality-gate/baseline.json");
+        resolved.Replace('\\', '/').Should().EndWith(".qualitygate/baseline.json");
     }
 
     [Fact]
