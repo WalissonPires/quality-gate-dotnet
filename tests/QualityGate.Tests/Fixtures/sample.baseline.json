@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "commit": "ba171e6242612a27d6eb46ed95059633da6ba993",
+  "timestamp": "2026-08-29T12:29:13.9988839+00:00",
+  "toolVersion": "1.0.0",
+  "metrics": {
+    "lineCoverage": 22.9,
+    "branchCoverage": 75.7,
+    "totalTests": 1360,
+    "failedTests": 0,
+    "totalWarnings": 0,
+    "architectureViolations": 24,
+    "maxCyclomaticComplexity": 60,
+    "mutationScore": null
+  },
+  "features": {
+    "AI": {
+      "lineCoverage": 52.7,
+      "branchCoverage": 36.4,
+      "architectureViolations": 0,
+      "maxComplexity": 16,
+      "totalLines": 566
+    },
+    "AiProviders": {
+      "lineCoverage": 99.1,
+      "branchCoverage": 100,
+      "architectureViolations": 0,
+      "maxComplexity": 5,
+      "totalLines": 934
+    },
+    "Auth": {
+      "lineCoverage": 99.1,
+      "branchCoverage": 100,
+      "architectureViolations": 0,
+      "maxComplexity": 5,
+      "totalLines": 334
+    },
+    "Channels": {
+      "lineCoverage": 82.0,
+      "branchCoverage": 65.7,
+      "architectureViolations": 4,
+      "maxComplexity": 60,
+      "totalLines": 2789
+    },
+    "Jobs": {
+      "lineCoverage": 95.9,
+      "branchCoverage": 91.7,
+      "architectureViolations": 0,
+      "maxComplexity": 5,
+      "totalLines": 369
+    },
+    "Notifications": {
+      "lineCoverage": 88.8,
+      "branchCoverage": 83.2,
+      "architectureViolations": 17,
+      "maxComplexity": 22,
+      "totalLines": 2691
+    },
+    "Persons": {
+      "lineCoverage": 94.0,
+      "branchCoverage": 90.7,
+      "architectureViolations": 1,
+      "maxComplexity": 30,
+      "totalLines": 1493
+    },
+    "Realtime": {
+      "lineCoverage": 92.3,
+      "branchCoverage": 100,
+      "architectureViolations": 0,
+      "maxComplexity": 5,
+      "totalLines": 104
+    },
+    "Tenants": {
+      "lineCoverage": 94.8,
+      "branchCoverage": 100,
+      "architectureViolations": 0,
+      "maxComplexity": 34,
+      "totalLines": 770
+    },
+    "Workflows": {
+      "lineCoverage": 72.6,
+      "branchCoverage": 77.3,
+      "architectureViolations": 2,
+      "maxComplexity": 37,
+      "totalLines": 3520
+    }
+  }
+}

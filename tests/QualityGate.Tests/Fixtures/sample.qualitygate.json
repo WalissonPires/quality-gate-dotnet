@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "changedCode": {
+    "lineCoverage": 80,
+    "branchCoverage": 70,
+    "maxCyclomaticComplexity": 10,
+    "maxMethodLines": 40,
+    "maxClassLines": 300,
+    "newWarnings": 0
+  },
+  "global": {
+    "lineCoverage": null,
+    "branchCoverage": null
+  },
+  "mutation": {
+    "enabled": false,
+    "minimumScore": 70
+  },
+  "execution": {
+    "failFast": false,
+    "unitTests": true,
+    "integrationTests": false,
+    "e2eTests": false,
+    "processTimeoutSeconds": 300
+  },
+  "architecture": {
+    "rules": [
+      {
+        "name": "DomainIsolation",
+        "source": "Wamage.Features.*.Domain",
+        "forbiddenDependencies": [
+          "Microsoft.EntityFrameworkCore",
+          "Microsoft.AspNetCore",
+          "MediatR",
+          "Wamage.Features.*.Infrastructure",
+          "Wamage.Features.*.API"
+        ],
+        "strict": true
+      },
+      {
+        "name": "ApplicationIsolation",
+        "source": "Wamage.Features.*.Application",
+        "forbiddenDependencies": [
+          "Microsoft.EntityFrameworkCore",
+          "Wamage.Features.*.Infrastructure",
+          "Wamage.Features.*.API",
+          "Wamage.Shared.Database.AppDbContext"
+        ],
+        "strict": true
+      },
+      {
+        "name": "ApiIsolation",
+        "source": "Wamage.Features.*.API",
+        "forbiddenDependencies": [
+          "Wamage.Features.*.Infrastructure",
+          "Wamage.Shared.Database.AppDbContext"
+        ],
+        "strict": true
+      }
+    ]
+  }
+}
