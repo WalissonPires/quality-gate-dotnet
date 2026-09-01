@@ -44,4 +44,22 @@ public sealed class ConsoleReporterTests
         output.Should().Contain("QUALITY GATE: FAIL");
         output.Should().Contain("Full report: .artifacts/report.json");
     }
+
+    [Fact]
+    public async Task ReportAsync_WithMultipleReportArtifactPaths_OutputsAllPaths()
+    {
+        var target = QualityTarget.ForRepository();
+        var qualityResult = new QualityResult(true, target, [], TimeSpan.Zero, "1.0.0", "run-12345678");
+
+        var reporter = new ConsoleReporter([".artifacts/report.json", ".artifacts/report.md"]);
+        var sb = new StringBuilder();
+        using var writer = new StringWriter(sb);
+
+        await reporter.ReportAsync(qualityResult, writer);
+
+        var output = sb.ToString();
+        output.Should().Contain("Full reports:");
+        output.Should().Contain("- .artifacts/report.json");
+        output.Should().Contain("- .artifacts/report.md");
+    }
 }

@@ -28,7 +28,7 @@ public static class CheckCommand
         var projectOption = new Option<string?>("--project", "Evaluate a specific .csproj project");
         var repositoryOption = new Option<bool>("--repository", "Evaluate the entire repository");
         var baseOption = new Option<string?>("--base", "Git base reference for diff comparison");
-        var formatOption = new Option<string>("--format", () => "console", "Output format: console, json, both");
+        var formatOption = new Option<string>("--format", () => "console", "Output format: console, json, markdown (or md), both");
         var skipOption = new Option<string[]>("--skip", "Gates to skip (comma-separated or multiple)") { AllowMultipleArgumentsPerToken = true };
         var onlyOption = new Option<string[]>("--only", "Only run these gates (comma-separated or multiple)") { AllowMultipleArgumentsPerToken = true };
         var failFastOption = new Option<bool>("--fail-fast", "Stop after first gate failure");
@@ -109,9 +109,9 @@ public static class CheckCommand
         }
 
         format = format.ToLowerInvariant();
-        if (format is not ("console" or "json" or "both"))
+        if (format is not ("console" or "json" or "markdown" or "md" or "both"))
         {
-            Console.Error.WriteLine($"Error: Invalid format '{format}'. Supported formats: console, json, both.");
+            Console.Error.WriteLine($"Error: Invalid format '{format}'. Supported formats: console, json, markdown (or md), both.");
             return 2;
         }
 
@@ -214,6 +214,7 @@ public static class CheckCommand
             var artifactDir = Path.Combine(workingDir, ".qualitygate", "artifacts", runId);
             Directory.CreateDirectory(artifactDir);
             var reportJsonPath = Path.Combine(artifactDir, "report.json");
+            var reportMdPath = Path.Combine(artifactDir, "report.md");
 
             var context = new QualityContext(
                 target,
@@ -286,32 +287,55 @@ public static class CheckCommand
             }
 
             // Generate reports
-            var jsonReporter = new JsonReporter();
-            var jsonContent = jsonReporter.Serialize(qualityResult);
-            await File.WriteAllTextAsync(reportJsonPath, jsonContent, cancellationToken).ConfigureAwait(false);
-
             if (format == "json")
             {
+                var jsonReporter = new JsonReporter();
+                var jsonContent = jsonReporter.Serialize(qualityResult);
+                await File.WriteAllTextAsync(reportJsonPath, jsonContent, cancellationToken).ConfigureAwait(false);
                 Console.WriteLine(jsonContent);
             }
-            else if (format is "console" or "both")
+            else if (format is "markdown" or "md")
             {
+                var markdownReporter = new MarkdownReporter();
+                var mdContent = markdownReporter.Serialize(qualityResult);
+                await File.WriteAllTextAsync(reportMdPath, mdContent, cancellationToken).ConfigureAwait(false);
+                Console.WriteLine(mdContent);
+            }
+            else if (format == "both")
+            {
+                var jsonReporter = new JsonReporter();
+                var jsonContent = jsonReporter.Serialize(qualityResult);
+                await File.WriteAllTextAsync(reportJsonPath, jsonContent, cancellationToken).ConfigureAwait(false);
+
+                var markdownReporter = new MarkdownReporter();
+                var mdContent = markdownReporter.Serialize(qualityResult);
+                await File.WriteAllTextAsync(reportMdPath, mdContent, cancellationToken).ConfigureAwait(false);
+
+                var consoleReporter = new ConsoleReporter([reportJsonPath, reportMdPath]);
+                await consoleReporter.ReportAsync(qualityResult, Console.Out, cancellationToken).ConfigureAwait(false);
+            }
+            else // console
+            {
+                var jsonReporter = new JsonReporter();
+                var jsonContent = jsonReporter.Serialize(qualityResult);
+                await File.WriteAllTextAsync(reportJsonPath, jsonContent, cancellationToken).ConfigureAwait(false);
+
                 var consoleReporter = new ConsoleReporter(reportJsonPath);
                 await consoleReporter.ReportAsync(qualityResult, Console.Out, cancellationToken).ConfigureAwait(false);
+            }
 
-                if (ratchetResult != null)
+            if (format is "console" or "both" && ratchetResult != null)
+            {
+                Console.WriteLine();
+                Console.WriteLine("QUALITY RATCHET VERIFICATION:");
+                foreach (var summary in ratchetResult.Summaries)
                 {
-                    Console.WriteLine();
-                    Console.WriteLine("QUALITY RATCHET VERIFICATION:");
-                    foreach (var summary in ratchetResult.Summaries)
-                    {
-                        Console.WriteLine($"  {summary}");
-                    }
+                    Console.WriteLine($"  {summary}");
+                }
 
-                    if (!ratchetResult.Passed)
-                    {
-                        Console.WriteLine("  ❌ RATCHET VIOLATION: Quality metrics have regressed compared to baseline.");
-                    }
+                if (!ratchetResult.Passed)
+                {
+                    Console.WriteLine("  ❌ RATCHET VIOLATION: Quality metrics have regressed compared to baseline.");
                 }
             }
 

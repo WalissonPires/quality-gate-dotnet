@@ -4,11 +4,16 @@ namespace QualityGate.Reporting;
 
 public sealed class ConsoleReporter : IReporter
 {
-    private readonly string? _reportArtifactPath;
+    private readonly IReadOnlyList<string> _reportArtifactPaths;
 
     public ConsoleReporter(string? reportArtifactPath = null)
+        : this(string.IsNullOrWhiteSpace(reportArtifactPath) ? [] : [reportArtifactPath])
     {
-        _reportArtifactPath = reportArtifactPath;
+    }
+
+    public ConsoleReporter(IEnumerable<string> reportArtifactPaths)
+    {
+        _reportArtifactPaths = (reportArtifactPaths ?? []).Where(p => !string.IsNullOrWhiteSpace(p)).ToList().AsReadOnly();
     }
 
     public async Task ReportAsync(QualityResult result, TextWriter writer, CancellationToken cancellationToken = default)
@@ -71,9 +76,17 @@ public sealed class ConsoleReporter : IReporter
         string overallStatus = result.Passed ? "PASS" : "FAIL";
         await writer.WriteLineAsync($"QUALITY GATE: {overallStatus}").ConfigureAwait(false);
 
-        if (!string.IsNullOrWhiteSpace(_reportArtifactPath))
+        if (_reportArtifactPaths.Count == 1)
         {
-            await writer.WriteLineAsync($"  Full report: {_reportArtifactPath}").ConfigureAwait(false);
+            await writer.WriteLineAsync($"  Full report: {_reportArtifactPaths[0]}").ConfigureAwait(false);
+        }
+        else if (_reportArtifactPaths.Count > 1)
+        {
+            await writer.WriteLineAsync("  Full reports:").ConfigureAwait(false);
+            foreach (var path in _reportArtifactPaths)
+            {
+                await writer.WriteLineAsync($"    - {path}").ConfigureAwait(false);
+            }
         }
     }
 

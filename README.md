@@ -94,12 +94,14 @@ qualitygate check --project src/MeuProjeto/MeuProjeto.csproj
 # Namespace específico
 qualitygate check --namespace MeuApp.Features.Pedidos
 
-# Saída em formato JSON
+# Saída em formato JSON (imprime JSON e grava .qualitygate/artifacts/<runId>/report.json)
 qualitygate check --diff --format json
 
-# Saída dupla: console e relatório JSON gravado em .qualitygate/artifacts/<runId>/report.json
-qualitygate check --diff --format both
+# Saída em formato Markdown (imprime Markdown e grava .qualitygate/artifacts/<runId>/report.md)
+qualitygate check --diff --format markdown # ou --format md
 
+# Saída dupla: console no terminal e relatórios JSON e MD gravados em .qualitygate/artifacts/<runId>/
+qualitygate check --diff --format both
 # Pular gates específicos
 qualitygate check --diff --skip mutation,staticanalysis
 
@@ -142,7 +144,7 @@ qualitygate baseline record --output .qualitygate/baseline.json
 | `--project <caminho>` | Texto | — | Avalia um projeto `.csproj` específico |
 | `--namespace <ns>` | Texto | — | Avalia um namespace específico |
 | `--base <ref>` | Texto | `HEAD~1` / merge-base | Referência Git base para comparação de diff |
-| `--format <formato>` | Enumeração | `console` | Formato de saída: `console`, `json` ou `both` |
+| `--format <formato>` | Enumeração | `console` | Formato de saída: `console`, `json`, `markdown` (ou `md`), ou `both` |
 | `--skip <gates>` | Lista | — | Gates ignorados (`build,test,coverage,complexity,staticanalysis,architecture,mutation`) |
 | `--only <gates>` | Lista | — | Executa apenas os gates informados |
 | `--fail-fast` | Sinalizador | `false` | Para a execução logo após a primeira falha |
@@ -181,7 +183,7 @@ cp qualitygate.sample.json meu-projeto/.qualitygate/qualitygate.json
 ```
 
 ### Diretório de Artefatos Gerados
-Todos os relatórios (`report.json`) e saídas intermediárias de cobertura gerados pela CLI são gravados exclusivamente em:
+Todos os relatórios (`report.json`, `report.md`) e saídas intermediárias de cobertura gerados pela CLI são gravados exclusivamente em:
 ```
 .qualitygate/artifacts/<runId>/
 ```
@@ -232,8 +234,15 @@ jobs:
       - name: Executar Verificação de Qualidade
         run: |
           ./qualitygate check --diff --ratchet --baseline /tmp/ratchet/main-baseline.json --format both
-```
 
+      - name: Publicar Relatório no GitHub Actions Summary
+        if: always()
+        run: |
+          REPORT_MD=$(find .qualitygate/artifacts -name "report.md" | sort | tail -n 1)
+          if [ -n "$REPORT_MD" ] && [ -f "$REPORT_MD" ]; then
+            cat "$REPORT_MD" >> $GITHUB_STEP_SUMMARY
+          fi
+```
 ### 2. Atualização Automática da Baseline no Merge (`.github/workflows/atualizar-baseline.yml`)
 
 ```yaml

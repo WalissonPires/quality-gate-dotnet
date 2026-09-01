@@ -120,4 +120,96 @@ public sealed class CheckCommandTests
 
         exitCode.Should().Be(4);
     }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenFormatIsInvalid_ReturnsExitCode2()
+    {
+        var exitCode = await CheckCommand.ExecuteAsync(
+            diff: true, ns: null, project: null, repository: false, baseRef: null,
+            format: "unsupported_format", skip: [], only: [], failFast: false, verbose: false,
+            configPath: "qualitygate.json");
+
+        exitCode.Should().Be(2);
+    }
+
+    [Theory]
+    [InlineData("md")]
+    [InlineData("markdown")]
+    public async Task ExecuteAsync_WhenFormatIsMarkdown_PrintsMarkdown(string format)
+    {
+        var gate = Substitute.For<IQualityGate>();
+        gate.Name.Returns("Build");
+        gate.ExecuteAsync(Arg.Any<QualityContext>(), Arg.Any<CancellationToken>())
+            .Returns(GateResult.Pass("Build", "Succeeded", TimeSpan.FromSeconds(1)));
+
+        using var sw = new StringWriter();
+        var originalOut = Console.Out;
+        Console.SetOut(sw);
+
+        try
+        {
+            var exitCode = await CheckCommand.ExecuteAsync(
+                diff: true, ns: null, project: null, repository: false, baseRef: null,
+                format: format, skip: [], only: [], failFast: false, verbose: false,
+                configPath: "qualitygate.json",
+                processRunner: _processRunner,
+                gitService: _gitService,
+                dotnetService: _dotnetService,
+                coverageParser: _coverageParser,
+                customGates: [gate]);
+
+            exitCode.Should().Be(0);
+            var output = sw.ToString();
+            output.Should().Contain("# Wamage Quality Gate Report");
+            output.Should().Contain("✅ **PASSED**");
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenFormatIsBoth_GeneratesBothJsonAndMdReports()
+    {
+        var gate = Substitute.For<IQualityGate>();
+        gate.Name.Returns("Build");
+        gate.ExecuteAsync(Arg.Any<QualityContext>(), Arg.Any<CancellationToken>())
+            .Returns(GateResult.Pass("Build", "Succeeded", TimeSpan.FromSeconds(1)));
+
+        var artifactsBase = Path.Combine(Environment.CurrentDirectory, ".qualitygate", "artifacts");
+        var beforeDirs = Directory.Exists(artifactsBase)
+            ? Directory.GetDirectories(artifactsBase).ToHashSet()
+            : [];
+
+        var exitCode = await CheckCommand.ExecuteAsync(
+            diff: true, ns: null, project: null, repository: false, baseRef: null,
+            format: "both", skip: [], only: [], failFast: false, verbose: false,
+            configPath: "qualitygate.json",
+            processRunner: _processRunner,
+            gitService: _gitService,
+            dotnetService: _dotnetService,
+            coverageParser: _coverageParser,
+            customGates: [gate]);
+
+        exitCode.Should().Be(0);
+
+        var afterDirs = Directory.GetDirectories(artifactsBase).ToHashSet();
+        afterDirs.ExceptWith(beforeDirs);
+        afterDirs.Should().ContainSingle();
+
+        var newRunDir = afterDirs.Single();
+        File.Exists(Path.Combine(newRunDir, "report.json")).Should().BeTrue();
+        File.Exists(Path.Combine(newRunDir, "report.md")).Should().BeTrue();
+
+        // Clean up test artifact folder
+        try
+        {
+            Directory.Delete(newRunDir, recursive: true);
+        }
+        catch
+        {
+            // Ignore cleanup errors
+        }
+    }
 }
