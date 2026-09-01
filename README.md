@@ -195,7 +195,7 @@ Adicione a pasta `.qualitygate/artifacts/` ao arquivo `.gitignore` do seu projet
 
 Abaixo estão exemplos de como integrar a CLI do Quality Gate nos fluxos de trabalho de qualquer repositório .NET cliente:
 
-### 1. Verificação de Pull Request com Catraca (`.github/workflows/qualidade.yml`)
+### 1. Verificação de Pull Request com Catraca (`.github/workflows/pr-quality-ratchet.yml`)
 
 ```yaml
 name: Quality Gate
@@ -205,20 +205,20 @@ on:
     branches: [ main, master ]
 
 jobs:
-  verificacao:
+  check:
     runs-on: ubuntu-latest
     steps:
-      - name: Obter código do repositório
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Configurar .NET 10 SDK
+      - name: Setup .NET 10 SDK
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
 
-      - name: Baixar CLI do Quality Gate
+      - name: Download Quality Gate CLI
         run: |
           gh release download --repo <org>/quality-gate-dotnet --pattern "qualitygate-*-linux-x64.tar.gz"
           tar -xzvf qualitygate-*-linux-x64.tar.gz
@@ -226,16 +226,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extrair Baseline da Branch Principal
+      - name: Extract Baseline from Main Branch
         run: |
           mkdir -p /tmp/ratchet
           git show origin/main:.qualitygate/baseline.json > /tmp/ratchet/main-baseline.json 2>/dev/null || true
 
-      - name: Executar Verificação de Qualidade
+      - name: Run Quality Gate Check
         run: |
           ./qualitygate check --diff --ratchet --baseline /tmp/ratchet/main-baseline.json --format both
 
-      - name: Publicar Relatório no GitHub Actions Summary
+      - name: Publish Report to GitHub Actions Summary
         if: always()
         run: |
           REPORT_MD=$(find .qualitygate/artifacts -name "report.md" | sort | tail -n 1)
@@ -243,30 +243,30 @@ jobs:
             cat "$REPORT_MD" >> $GITHUB_STEP_SUMMARY
           fi
 ```
-### 2. Atualização Automática da Baseline no Merge (`.github/workflows/atualizar-baseline.yml`)
+### 2. Atualização Automática da Baseline no Merge (`.github/workflows/update-quality-baseline.yml`)
 
 ```yaml
-name: Atualizar Baseline de Qualidade
+name: Update Quality Baseline
 
 on:
   push:
     branches: [ main ]
 
 jobs:
-  gravar-baseline:
+  record-baseline:
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Obter código do repositório
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Configurar .NET 10 SDK
+      - name: Setup .NET 10 SDK
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
 
-      - name: Baixar CLI do Quality Gate
+      - name: Download Quality Gate CLI
         run: |
           gh release download --repo <org>/quality-gate-dotnet --pattern "qualitygate-*-linux-x64.tar.gz"
           tar -xzvf qualitygate-*-linux-x64.tar.gz
@@ -274,13 +274,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Gravar e Registrar Nova Baseline
+      - name: Record and Commit New Baseline
         run: |
           ./qualitygate baseline record --output .qualitygate/baseline.json
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .qualitygate/baseline.json
-          git diff --staged --quiet || (git commit -m "chore(qualidade): atualizar baseline de metricas [skip ci]" && git push)
+          git diff --staged --quiet || (git commit -m "chore(quality): update metrics baseline [skip ci]" && git push)
 ```
 
 ---
