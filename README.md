@@ -126,10 +126,10 @@ qualitygate check --diff --verbose
 
 ### Sistema de Catraca (Ratchet)
 
-O modo de catraca (`--ratchet`) assegura que a qualidade do código **nunca regrida**:
-- **Modo Diff**: Mapeia os arquivos modificados e garante que a cobertura de código e as violações de arquitetura não piorem em relação à baseline gravada.
+O modo de catraca (`--ratchet`) assegura que a qualidade do código **nunca regrida** em relação ao patamar já registrado:
+- **No Modo Diff (`--diff`)**: Atua sobre as **features afetadas**, garantindo que a cobertura de testes daquela feature não caiu em relação à baseline gravada. Regras de código novo (novas violações de arquitetura e novos warnings) são barradas com tolerância zero pelos respectivos gates (`ArchitectureGate` e `StaticAnalysisGate`).
+- **No Modo Repositório (`--repository`)**: Avalia o repositório consolidado e impede qualquer aumento na dívida técnica global (violações de arquitetura acumuladas, total de warnings e queda na cobertura global).
 - **Opção `--baseline <caminho>`**: Permite apontar o caminho do arquivo de baseline (o padrão adotado é `.qualitygate/baseline.json`).
-
 ### Gravação de Nova Baseline (`baseline record`)
 
 Para registrar o estado atual de métricas do repositório como o novo patamar mínimo de qualidade:

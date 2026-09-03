@@ -28,12 +28,12 @@ public sealed class RatchetEvaluatorTests
     };
 
     [Fact]
-    public void Evaluate_WhenAllMetricsEqualOrBetter_ReturnsPassed()
+    public void Evaluate_WhenRepositoryScopeAndAllMetricsEqualOrBetter_ReturnsPassed()
     {
-        var target = QualityTarget.ForDiff();
+        var target = QualityTarget.ForRepository();
         var gates = new List<GateResult>
         {
-            GateResult.Pass("Architecture", "5 violations", TimeSpan.Zero, actual: 4), // 4 <= 5
+            GateResult.Pass("Architecture", "4 violations", TimeSpan.Zero, actual: 4), // 4 <= 5
             GateResult.Pass("StaticAnalysis", "0 warnings", TimeSpan.Zero, actual: 0),
             GateResult.Pass("Coverage", "82% coverage", TimeSpan.Zero, actual: 82.0m)
         };
@@ -44,12 +44,13 @@ public sealed class RatchetEvaluatorTests
 
         result.Passed.Should().BeTrue();
         result.Findings.Should().BeEmpty();
+        result.Summaries.Should().Contain(s => s.Contains("Global architecture violations: 4 <= 5"));
     }
 
     [Fact]
-    public void Evaluate_WhenArchitectureViolationsIncrease_ReturnsFailed()
+    public void Evaluate_WhenRepositoryScopeAndArchitectureViolationsIncrease_ReturnsFailed()
     {
-        var target = QualityTarget.ForDiff();
+        var target = QualityTarget.ForRepository();
         var gates = new List<GateResult>
         {
             GateResult.Pass("Architecture", "6 violations", TimeSpan.Zero, actual: 6), // 6 > 5 (regressed)
@@ -65,6 +66,26 @@ public sealed class RatchetEvaluatorTests
         result.Findings[0].Rule.Should().Be("Ratchet.ArchitectureViolations");
     }
 
+    [Fact]
+    public void Evaluate_WhenDiffScope_DoesNotEvaluateGlobalArchitectureRatchet()
+    {
+        var target = QualityTarget.ForDiff();
+        var gates = new List<GateResult>
+        {
+            GateResult.Pass("Architecture", "1 violation", TimeSpan.Zero, actual: 1), // 1 violation in diff
+            GateResult.Pass("StaticAnalysis", "0 warnings", TimeSpan.Zero, actual: 0)
+        };
+
+        var currentResult = new QualityResult(true, target, gates, TimeSpan.FromSeconds(2), "1.0.0", "run1");
+
+        var result = RatchetEvaluator.Evaluate(currentResult, _baseline);
+
+        result.Passed.Should().BeTrue();
+        result.Findings.Should().BeEmpty();
+        // Should NOT contain misleading global architecture comparison
+        result.Summaries.Should().NotContain(s => s.Contains("Global architecture violations"));
+        result.Summaries.Should().Contain(s => s.Contains("Per-feature ratchet"));
+    }
     [Fact]
     public void Evaluate_WhenFeatureCoverageDrops_ReturnsFailed()
     {
