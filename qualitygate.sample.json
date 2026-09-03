@@ -6,7 +6,11 @@
     "maxCyclomaticComplexity": 10,
     "maxMethodLines": 40,
     "maxClassLines": 300,
-    "newWarnings": 0
+    "newWarnings": 0,
+    "ignoreTestProjectsInComplexity": true,
+    "ignorePatterns": [
+      "**/CustomMigrations/**"
+    ]
   },
   "global": {
     "lineCoverage": null,

@@ -28,6 +28,7 @@ public static class CheckCommand
         var projectOption = new Option<string?>("--project", "Evaluate a specific .csproj project");
         var repositoryOption = new Option<bool>("--repository", "Evaluate the entire repository");
         var baseOption = new Option<string?>("--base", "Git base reference for diff comparison");
+        var workingTreeOption = new Option<bool>(["--working-tree", "-w"], "Include uncommitted changes (staged, unstaged, and untracked) in the diff evaluation");
         var formatOption = new Option<string>("--format", () => "console", "Output format: console, json, markdown (or md), both");
         var skipOption = new Option<string[]>("--skip", "Gates to skip (comma-separated or multiple)") { AllowMultipleArgumentsPerToken = true };
         var onlyOption = new Option<string[]>("--only", "Only run these gates (comma-separated or multiple)") { AllowMultipleArgumentsPerToken = true };
@@ -42,6 +43,7 @@ public static class CheckCommand
         command.AddOption(projectOption);
         command.AddOption(repositoryOption);
         command.AddOption(baseOption);
+        command.AddOption(workingTreeOption);
         command.AddOption(formatOption);
         command.AddOption(skipOption);
         command.AddOption(onlyOption);
@@ -58,6 +60,7 @@ public static class CheckCommand
             var project = context.ParseResult.GetValueForOption(projectOption);
             var repository = context.ParseResult.GetValueForOption(repositoryOption);
             var baseRef = context.ParseResult.GetValueForOption(baseOption);
+            var workingTree = context.ParseResult.GetValueForOption(workingTreeOption);
             var format = context.ParseResult.GetValueForOption(formatOption) ?? "console";
             var skip = context.ParseResult.GetValueForOption(skipOption) ?? [];
             var only = context.ParseResult.GetValueForOption(onlyOption) ?? [];
@@ -69,7 +72,7 @@ public static class CheckCommand
 
             var exitCode = await ExecuteAsync(
                 diff, ns, project, repository, baseRef, format, skip, only, failFast, verbose, configPath,
-                ratchet, baselinePath,
+                ratchet, baselinePath, workingTree,
                 processRunner, gitService, dotnetService, coverageParser, customGates, context.GetCancellationToken());
 
             context.ExitCode = exitCode;
@@ -92,6 +95,7 @@ public static class CheckCommand
         string configPath,
         bool ratchet = false,
         string? baselinePath = null,
+        bool workingTree = false,
         IProcessRunner? processRunner = null,
         IGitService? gitService = null,
         IDotnetService? dotnetService = null,
@@ -167,7 +171,19 @@ public static class CheckCommand
             ChangeSet? changeSet = null;
             if (target.Scope == QualityScope.Diff)
             {
-                changeSet = await gitService.GetChangeSetAsync(workingDir, baseRef, cancellationToken).ConfigureAwait(false);
+                changeSet = await gitService.GetChangeSetAsync(workingDir, baseRef, workingTree, cancellationToken).ConfigureAwait(false);
+
+                if (!workingTree && changeSet.Files.Count == 0)
+                {
+                    var hasUncommitted = await gitService.HasUncommittedChangesAsync(workingDir, cancellationToken).ConfigureAwait(false);
+                    if (hasUncommitted)
+                    {
+                        Console.WriteLine();
+                        Console.WriteLine("⚠️  Warning: No changes found between commits, but uncommitted local changes exist in your working directory.");
+                        Console.WriteLine("   To analyze local uncommitted changes, run with: qualitygate check --diff --working-tree");
+                        Console.WriteLine();
+                    }
+                }
             }
 
             // Project discovery
@@ -224,7 +240,21 @@ public static class CheckCommand
                 artifactDir,
                 runId,
                 cancellationToken,
-                changeSet);
+                changeSet,
+                verbose);
+
+            if (verbose)
+            {
+                if (changeSet != null)
+                {
+                    Console.WriteLine($"[Verbose] ChangeSet: {changeSet.Files.Count} changed file(s) (base: {changeSet.BaseCommit}, head: {changeSet.HeadCommit}).");
+                    Console.WriteLine($"[Verbose] C# source files in diff: {changeSet.CSharpSourceFiles.Count}");
+                }
+                Console.WriteLine($"[Verbose] Discovered {allProjects.Count} total project(s).");
+                Console.WriteLine($"[Verbose] Affected projects ({affectedProjects.Count}): {(affectedProjects.Count > 0 ? string.Join(", ", affectedProjects) : "none")}");
+                Console.WriteLine($"[Verbose] Test projects ({testProjects.Count}): {(testProjects.Count > 0 ? string.Join(", ", testProjects) : "none")}");
+                Console.WriteLine($"[Verbose] Artifacts directory: {artifactDir}");
+            }
 
             // Instantiate default gates if none provided
             var architectureValidator = new QualityGate.Infrastructure.Architecture.ArchitectureValidator();

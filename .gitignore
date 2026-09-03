@@ -3,3 +3,4 @@
 .artifacts/
 TestResults/
 .qualitygate/artifacts/
+src/QualityGate/.qualitygate/artifacts

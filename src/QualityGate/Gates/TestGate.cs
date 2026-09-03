@@ -54,6 +54,10 @@ public sealed partial class TestGate : IQualityGate
             var resultsDir = Path.Combine(context.ArtifactDirectory, "TestResults", Path.GetFileNameWithoutExtension(testProject));
             Directory.CreateDirectory(resultsDir);
 
+            if (context.Verbose)
+            {
+                Console.WriteLine($"[Verbose] [Test] Executing test project: {testProject} (collecting coverage)...");
+            }
             var testResult = await _dotnetService.TestAsync(
                 testProject,
                 resultsDir,
@@ -65,6 +69,8 @@ public sealed partial class TestGate : IQualityGate
 
             totalDuration += testResult.Duration;
 
+            if (context.Verbose)
+                Console.WriteLine($"[Verbose] [Test] Completed {Path.GetFileName(testProject)}: {testResult.PassedTests} passed, {testResult.FailedTests} failed, {testResult.SkippedTests} skipped in {testResult.Duration.TotalSeconds:0.##}s");
             if (testResult.TimedOut)
             {
                 return GateResult.Error(Name, $"Tests timed out for '{testProject}' after {timeout.TotalSeconds} seconds.", totalDuration);

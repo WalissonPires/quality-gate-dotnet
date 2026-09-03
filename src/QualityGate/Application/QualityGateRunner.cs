@@ -39,12 +39,20 @@ public sealed class QualityGateRunner
 
             if (skipSet.Contains(gate.Name) || (onlySet != null && !onlySet.Contains(gate.Name)))
             {
+                if (context.Verbose)
+                {
+                    Console.WriteLine($"[Verbose] [{gate.Name}] Skipped.");
+                }
                 results.Add(GateResult.Skip(gate.Name, $"Gate '{gate.Name}' was skipped."));
                 continue;
             }
 
             GateResult result;
             var gateStopwatch = Stopwatch.StartNew();
+            if (context.Verbose)
+            {
+                Console.WriteLine($"[Verbose] [{gate.Name}] Starting evaluation...");
+            }
             try
             {
                 result = await gate.ExecuteAsync(context, cancellationToken).ConfigureAwait(false);
@@ -64,6 +72,10 @@ public sealed class QualityGateRunner
             }
 
             results.Add(result);
+            if (context.Verbose)
+            {
+                Console.WriteLine($"[Verbose] [{gate.Name}] Completed in {gateStopwatch.ElapsedMilliseconds}ms with status: {result.Status} - {result.Message}");
+            }
 
             if (failFast && !result.Passed)
             {

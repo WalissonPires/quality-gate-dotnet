@@ -21,6 +21,9 @@ public sealed class QualityGateOptions
 
     [JsonPropertyName("architecture")]
     public ArchitectureOptions Architecture { get; set; } = new();
+
+    [JsonPropertyName("ignorePatterns")]
+    public List<string> IgnorePatterns { get; set; } = [];
 }
 
 public sealed class ChangedCodeOptions
@@ -42,6 +45,12 @@ public sealed class ChangedCodeOptions
 
     [JsonPropertyName("newWarnings")]
     public int? NewWarnings { get; set; } = 0;
+
+    [JsonPropertyName("ignorePatterns")]
+    public List<string> IgnorePatterns { get; set; } = [];
+
+    [JsonPropertyName("ignoreTestProjectsInComplexity")]
+    public bool IgnoreTestProjectsInComplexity { get; set; } = true;
 }
 
 public sealed class GlobalOptions

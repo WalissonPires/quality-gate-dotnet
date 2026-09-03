@@ -85,6 +85,9 @@ Execute os comandos a partir da pasta raiz do repositório .NET que você deseja
 # Modo padrão em repositório Git: avalia apenas o código alterado em relação ao commit base
 qualitygate check --diff
 
+
+# Validação pré-commit local: inclui alterações não commitadas (working tree, staged e untracked)
+qualitygate check --diff --working-tree # ou -w
 # Repositório completo
 qualitygate check --repository
 
@@ -117,7 +120,7 @@ qualitygate check --diff --ratchet --baseline .qualitygate/baseline.json
 # Interromper imediatamente no primeiro gate que reprovar
 qualitygate check --diff --fail-fast
 
-# Saída detalhada de diagnóstico técnico
+# Saída detalhada de diagnóstico técnico com telemetria em tempo real
 qualitygate check --diff --verbose
 ```
 
@@ -144,6 +147,7 @@ qualitygate baseline record --output .qualitygate/baseline.json
 | `--project <caminho>` | Texto | — | Avalia um projeto `.csproj` específico |
 | `--namespace <ns>` | Texto | — | Avalia um namespace específico |
 | `--base <ref>` | Texto | `HEAD~1` / merge-base | Referência Git base para comparação de diff |
+| `--working-tree`, `-w` | Sinalizador | `false` | Inclui alterações locais não comitadas (staged, unstaged e untracked) |
 | `--format <formato>` | Enumeração | `console` | Formato de saída: `console`, `json`, `markdown` (ou `md`), ou `both` |
 | `--skip <gates>` | Lista | — | Gates ignorados (`build,test,coverage,complexity,staticanalysis,architecture,mutation`) |
 | `--only <gates>` | Lista | — | Executa apenas os gates informados |
@@ -186,6 +190,30 @@ cp qualitygate.sample.json meu-projeto/.qualitygate/qualitygate.json
 Todos os relatórios (`report.json`, `report.md`) e saídas intermediárias de cobertura gerados pela CLI são gravados exclusivamente em:
 ```
 .qualitygate/artifacts/<runId>/
+```
+
+### Exclusão de Código Gerado e Padrões Ignorados (`ignorePatterns`)
+Por padrão, a CLI ignora automaticamente código gerado por ferramentas do .NET em memória (sem custo de I/O):
+- `*.Designer.cs` (metadados de migrations do EF Core, Windows Forms, etc.)
+- `*ModelSnapshot.cs` (snapshot de modelo do EF Core, independentemente do nome da pasta)
+- `*.g.cs` e `*.g.i.cs` (Roslyn Source Generators, Razor, gRPC, NSwag)
+
+Caso seu projeto use diretórios customizados de migrations ou pastas com código gerado/legado, declare `ignorePatterns` no `qualitygate.json`:
+```json
+"changedCode": {
+  "ignorePatterns": [
+    "**/DatabaseMigrations/**",
+    "**/CustomGenerated/**"
+  ]
+}
+```
+
+### Isenção de Projetos de Teste na Complexidade
+Por padrão, o `ComplexityGate` avalia exclusivamente **código de produção**, isentando projetos de teste identificados automaticamente pelo `ProjectDiscovery` (como testes unitários, testes de integração com `WebApplicationFactory` e testes E2E). Para alterar esse comportamento, configure:
+```json
+"changedCode": {
+  "ignoreTestProjectsInComplexity": true
+}
 ```
 Adicione a pasta `.qualitygate/artifacts/` ao arquivo `.gitignore` do seu projeto.
 

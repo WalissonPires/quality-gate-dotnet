@@ -74,4 +74,55 @@ public sealed class ComplexityGateTests
         result.Findings.Should().ContainSingle();
         result.Findings[0].Rule.Should().Be("CyclomaticComplexity");
     }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenFilesBelongToTestProject_ExemptsThemFromComplexityAnalysis()
+    {
+        _analyzer.AnalyzeFilesAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new ComplexityAnalysisResult([], []));
+
+        var context = new QualityContext(
+            QualityTarget.ForDiff(),
+            affectedProjects: [],
+            testProjects: ["backend.tests/Wamage.Tests.csproj"],
+            options: new QualityGateOptions(),
+            artifactDirectory: ".artifacts/test",
+            runId: "run1",
+            changeSet: new ChangeSet("base", "head", [
+                new ChangedFile("backend.tests/IntegrationTests/WorkflowTests.cs", ChangeType.Modified)
+            ]));
+
+        var result = await _gate.ExecuteAsync(context);
+
+        result.Passed.Should().BeTrue();
+        await _analyzer.Received(1).AnalyzeFilesAsync(
+            Arg.Is<IEnumerable<string>>(files => !files.Any()),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenFilesAreGenerated_IgnoresThem()
+    {
+        _analyzer.AnalyzeFilesAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new ComplexityAnalysisResult([], []));
+
+        var context = new QualityContext(
+            QualityTarget.ForDiff(),
+            affectedProjects: ["backend/Wamage.csproj"],
+            testProjects: [],
+            options: new QualityGateOptions(),
+            artifactDirectory: ".artifacts/test",
+            runId: "run1",
+            changeSet: new ChangeSet("base", "head", [
+                new ChangedFile("backend/Migrations/2026_Init.Designer.cs", ChangeType.Added),
+                new ChangedFile("backend/Data/AppDbContextModelSnapshot.cs", ChangeType.Modified)
+            ]));
+
+        var result = await _gate.ExecuteAsync(context);
+
+        result.Passed.Should().BeTrue();
+        await _analyzer.Received(1).AnalyzeFilesAsync(
+            Arg.Is<IEnumerable<string>>(files => !files.Any()),
+            Arg.Any<CancellationToken>());
+    }
 }

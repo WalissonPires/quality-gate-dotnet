@@ -38,8 +38,22 @@ public sealed class ComplexityGate : IQualityGate
                               !rel.Contains("/obj/", StringComparison.OrdinalIgnoreCase))
                 .ToList();
         }
+        var ignorePatterns = (context.Options.ChangedCode.IgnorePatterns ?? [])
+            .Concat(context.Options.IgnorePatterns ?? [])
+            .Distinct();
 
-        var analysis = await _analyzer.AnalyzeFilesAsync(sourceFiles, cancellationToken).ConfigureAwait(false);
+        var fileList = GeneratedCodeFilter.FilterPaths(sourceFiles, ignorePatterns).ToList();
+
+        if (context.Options.ChangedCode.IgnoreTestProjectsInComplexity && context.TestProjects.Count > 0)
+        {
+            fileList = fileList.Where(f => !IsTestFile(f, context.TestProjects)).ToList();
+        }
+
+        if (context.Verbose)
+        {
+            Console.WriteLine($"[Verbose] [Complexity] Analyzing {fileList.Count} C# source file(s) with Roslyn...");
+        }
+        var analysis = await _analyzer.AnalyzeFilesAsync(fileList, cancellationToken).ConfigureAwait(false);
 
         var findings = new List<GateFinding>();
 
@@ -111,5 +125,33 @@ public sealed class ComplexityGate : IQualityGate
             findings,
             actual: maxObservedComplexity,
             threshold: maxComplexityThreshold);
+    }
+
+    private static bool IsTestFile(string filePath, IEnumerable<string> testProjects)
+    {
+        if (string.IsNullOrWhiteSpace(filePath) || testProjects == null)
+        {
+            return false;
+        }
+
+        var normalizedFile = filePath.Replace('\\', '/').TrimStart('/');
+
+        foreach (var testProject in testProjects)
+        {
+            var normalizedProj = testProject.Replace('\\', '/').TrimStart('/');
+            var projDir = Path.GetDirectoryName(normalizedProj)?.Replace('\\', '/').TrimEnd('/');
+            if (string.IsNullOrEmpty(projDir))
+            {
+                continue;
+            }
+
+            if (normalizedFile.StartsWith(projDir + "/", StringComparison.OrdinalIgnoreCase) ||
+                normalizedFile.Equals(projDir, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

@@ -48,10 +48,14 @@ public sealed class CoverageGate : IQualityGate
 
     private GateResult EvaluateDiffCoverage(QualityContext context, CoverageSummary summary)
     {
-        var changedFiles = context.ChangeSet!.CSharpSourceFiles;
+        var ignorePatterns = (context.Options.ChangedCode.IgnorePatterns ?? [])
+            .Concat(context.Options.IgnorePatterns ?? [])
+            .Distinct();
+
+        var changedFiles = GeneratedCodeFilter.FilterFiles(context.ChangeSet!.CSharpSourceFiles, ignorePatterns);
         if (changedFiles.Count == 0)
         {
-            return GateResult.NotApplicable(Name, "No C# source files changed in this diff.");
+            return GateResult.NotApplicable(Name, "No C# source files changed in this diff (or all changed files were ignored).");
         }
 
         var threshold = context.Options.ChangedCode.LineCoverage ?? 80m;

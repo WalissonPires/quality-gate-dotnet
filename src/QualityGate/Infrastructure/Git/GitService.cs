@@ -83,20 +83,64 @@ public sealed class GitService : IGitService
         return await GetHeadCommitAsync(workingDirectory, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<ChangeSet> GetChangeSetAsync(string workingDirectory, string? baseCommit = null, CancellationToken cancellationToken = default)
+    public async Task<bool> HasUncommittedChangesAsync(string workingDirectory, CancellationToken cancellationToken = default)
     {
-        var headCommit = await GetHeadCommitAsync(workingDirectory, cancellationToken).ConfigureAwait(false);
+        var statusRequest = new ProcessRequest("git", ["status", "--porcelain"], workingDirectory, GitTimeout);
+        var statusResult = await _processRunner.RunAsync(statusRequest, cancellationToken).ConfigureAwait(false);
+        return statusResult.ExitCode == 0 && !string.IsNullOrWhiteSpace(statusResult.StandardOutput);
+    }
+
+    public async Task<ChangeSet> GetChangeSetAsync(
+        string workingDirectory,
+        string? baseCommit = null,
+        bool includeWorkingTree = false,
+        CancellationToken cancellationToken = default)
+    {
         var resolvedBase = baseCommit ?? await ResolveBaseCommitAsync(workingDirectory, null, cancellationToken).ConfigureAwait(false);
 
-        var diffRequest = new ProcessRequest("git", ["diff", "--name-status", "-M", resolvedBase, headCommit], workingDirectory, GitTimeout);
-        var diffResult = await _processRunner.RunAsync(diffRequest, cancellationToken).ConfigureAwait(false);
-        if (diffResult.ExitCode != 0)
+        if (includeWorkingTree)
         {
-            throw new InvalidOperationException($"Failed to compute git diff between '{resolvedBase}' and '{headCommit}': {diffResult.StandardError.Trim()}");
-        }
+            var diffRequest = new ProcessRequest("git", ["diff", "--name-status", "-M", resolvedBase], workingDirectory, GitTimeout);
+            var diffResult = await _processRunner.RunAsync(diffRequest, cancellationToken).ConfigureAwait(false);
+            if (diffResult.ExitCode != 0)
+            {
+                throw new InvalidOperationException($"Failed to compute git diff between '{resolvedBase}' and working tree: {diffResult.StandardError.Trim()}");
+            }
 
-        var files = ParseDiffNameStatus(diffResult.StandardOutput);
-        return new ChangeSet(resolvedBase, headCommit, files);
+            var files = ParseDiffNameStatus(diffResult.StandardOutput).ToList();
+            var existingPaths = new HashSet<string>(files.Select(f => f.Path), StringComparer.OrdinalIgnoreCase);
+
+            // Include untracked files
+            var untrackedRequest = new ProcessRequest("git", ["ls-files", "--others", "--exclude-standard"], workingDirectory, GitTimeout);
+            var untrackedResult = await _processRunner.RunAsync(untrackedRequest, cancellationToken).ConfigureAwait(false);
+            if (untrackedResult.ExitCode == 0 && !string.IsNullOrWhiteSpace(untrackedResult.StandardOutput))
+            {
+                var untrackedLines = untrackedResult.StandardOutput.Split(["\r\n", "\r", "\n"], StringSplitOptions.RemoveEmptyEntries);
+                foreach (var line in untrackedLines)
+                {
+                    var path = line.Trim();
+                    if (!string.IsNullOrWhiteSpace(path) && existingPaths.Add(path))
+                    {
+                        files.Add(new ChangedFile(path, ChangeType.Added));
+                    }
+                }
+            }
+
+            return new ChangeSet(resolvedBase, "WORKING_TREE", files);
+        }
+        else
+        {
+            var headCommit = await GetHeadCommitAsync(workingDirectory, cancellationToken).ConfigureAwait(false);
+            var diffRequest = new ProcessRequest("git", ["diff", "--name-status", "-M", resolvedBase, headCommit], workingDirectory, GitTimeout);
+            var diffResult = await _processRunner.RunAsync(diffRequest, cancellationToken).ConfigureAwait(false);
+            if (diffResult.ExitCode != 0)
+            {
+                throw new InvalidOperationException($"Failed to compute git diff between '{resolvedBase}' and '{headCommit}': {diffResult.StandardError.Trim()}");
+            }
+
+            var files = ParseDiffNameStatus(diffResult.StandardOutput);
+            return new ChangeSet(resolvedBase, headCommit, files);
+        }
     }
 
     public static IReadOnlyList<ChangedFile> ParseDiffNameStatus(string diffOutput)

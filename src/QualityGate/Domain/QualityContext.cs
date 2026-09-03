@@ -12,7 +12,7 @@ public sealed record QualityContext
     public string RunId { get; }
     public CancellationToken CancellationToken { get; }
     public ChangeSet? ChangeSet { get; }
-
+    public bool Verbose { get; }
     public QualityContext(
         QualityTarget target,
         IEnumerable<string> affectedProjects,
@@ -21,7 +21,8 @@ public sealed record QualityContext
         string artifactDirectory,
         string runId,
         CancellationToken cancellationToken = default,
-        ChangeSet? changeSet = null)
+        ChangeSet? changeSet = null,
+        bool verbose = false)
     {
         Target = target ?? throw new ArgumentNullException(nameof(target));
         AffectedProjects = (affectedProjects ?? []).ToList().AsReadOnly();
@@ -31,5 +32,6 @@ public sealed record QualityContext
         RunId = string.IsNullOrWhiteSpace(runId) ? Guid.NewGuid().ToString() : runId;
         CancellationToken = cancellationToken;
         ChangeSet = changeSet;
+        Verbose = verbose;
     }
 }

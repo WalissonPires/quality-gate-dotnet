@@ -26,7 +26,7 @@ public sealed class CheckCommandTests
 
         _gitService.IsGitRepositoryAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(true);
         _gitService.GetHeadCommitAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns("head123");
-        _gitService.GetChangeSetAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+        _gitService.GetChangeSetAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(new ChangeSet("base", "head", [new ChangedFile("backend/App.cs", ChangeType.Modified)]));
     }
 
@@ -211,5 +211,60 @@ public sealed class CheckCommandTests
         {
             // Ignore cleanup errors
         }
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenWorkingTreeIsTrue_PassesFlagToGitService()
+    {
+        var gate = Substitute.For<IQualityGate>();
+        gate.Name.Returns("Build");
+        gate.ExecuteAsync(Arg.Any<QualityContext>(), Arg.Any<CancellationToken>())
+            .Returns(GateResult.Pass("Build", "Succeeded", TimeSpan.FromSeconds(1)));
+
+        var exitCode = await CheckCommand.ExecuteAsync(
+            diff: true, ns: null, project: null, repository: false, baseRef: null,
+            format: "console", skip: [], only: [], failFast: false, verbose: false,
+            configPath: "qualitygate.json",
+            workingTree: true,
+            processRunner: _processRunner,
+            gitService: _gitService,
+            dotnetService: _dotnetService,
+            coverageParser: _coverageParser,
+            customGates: [gate]);
+
+        exitCode.Should().Be(0);
+        await _gitService.Received(1).GetChangeSetAsync(
+            Arg.Any<string>(),
+            Arg.Any<string?>(),
+            includeWorkingTree: true,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenDiffIsEmptyAndHasUncommittedChanges_ChecksUncommittedAndWarns()
+    {
+        _gitService.GetChangeSetAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .Returns(new ChangeSet("base", "head", []));
+        _gitService.HasUncommittedChangesAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var gate = Substitute.For<IQualityGate>();
+        gate.Name.Returns("Build");
+        gate.ExecuteAsync(Arg.Any<QualityContext>(), Arg.Any<CancellationToken>())
+            .Returns(GateResult.Pass("Build", "Succeeded", TimeSpan.FromSeconds(1)));
+
+        var exitCode = await CheckCommand.ExecuteAsync(
+            diff: true, ns: null, project: null, repository: false, baseRef: null,
+            format: "console", skip: [], only: [], failFast: false, verbose: false,
+            configPath: "qualitygate.json",
+            workingTree: false,
+            processRunner: _processRunner,
+            gitService: _gitService,
+            dotnetService: _dotnetService,
+            coverageParser: _coverageParser,
+            customGates: [gate]);
+
+        exitCode.Should().Be(0);
+        await _gitService.Received(1).HasUncommittedChangesAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 }

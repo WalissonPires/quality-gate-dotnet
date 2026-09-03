@@ -132,4 +132,41 @@ public sealed class CoverageGateTests
             Directory.Delete(tempDir, recursive: true);
         }
     }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenOnlyGeneratedFilesChanged_ReturnsNotApplicable()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        var xmlPath = Path.Combine(tempDir, "coverage.cobertura.xml");
+        await File.WriteAllTextAsync(xmlPath, "<coverage />");
+
+        _coverageParser.ParseMultipleAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CoverageSummary(100, 0, 0, 0, new Dictionary<string, FileCoverageReport>()));
+
+        var changeSet = new ChangeSet("base", "head", [
+            new ChangedFile("Migrations/20260902_AddFeature.Designer.cs", ChangeType.Added),
+            new ChangedFile("Data/AppDbContextModelSnapshot.cs", ChangeType.Modified)
+        ]);
+
+        var context = new QualityContext(
+            QualityTarget.ForDiff(),
+            affectedProjects: ["backend/Wamage.csproj"],
+            testProjects: ["backend.tests/Wamage.Tests.csproj"],
+            options: new QualityGateOptions(),
+            artifactDirectory: tempDir,
+            runId: "run1",
+            changeSet: changeSet);
+
+        try
+        {
+            var result = await _gate.ExecuteAsync(context);
+            result.Status.Should().Be(GateStatus.NotApplicable);
+            result.Message.Should().Contain("ignored");
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
 }

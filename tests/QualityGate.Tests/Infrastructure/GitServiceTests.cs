@@ -70,4 +70,50 @@ public sealed class GitServiceTests
 
         head.Should().Be("a1b2c3d4e5f6");
     }
+
+    [Fact]
+    public async Task HasUncommittedChangesAsync_WhenStatusNotEmpty_ReturnsTrue()
+    {
+        _processRunner.RunAsync(Arg.Is<ProcessRequest>(r => r.FileName == "git" && r.Arguments.Contains("--porcelain")), Arg.Any<CancellationToken>())
+            .Returns(new ProcessResult(0, " M src/App.cs\n?? newfile.cs\n", string.Empty, TimeSpan.FromMilliseconds(50)));
+
+        var hasChanges = await _gitService.HasUncommittedChangesAsync(Environment.CurrentDirectory);
+
+        hasChanges.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task HasUncommittedChangesAsync_WhenStatusEmpty_ReturnsFalse()
+    {
+        _processRunner.RunAsync(Arg.Is<ProcessRequest>(r => r.FileName == "git" && r.Arguments.Contains("--porcelain")), Arg.Any<CancellationToken>())
+            .Returns(new ProcessResult(0, "", string.Empty, TimeSpan.FromMilliseconds(50)));
+
+        var hasChanges = await _gitService.HasUncommittedChangesAsync(Environment.CurrentDirectory);
+
+        hasChanges.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetChangeSetAsync_WhenIncludeWorkingTree_IncludesDiffAndUntrackedFiles()
+    {
+        // rev-parse for base
+        _processRunner.RunAsync(Arg.Is<ProcessRequest>(r => r.FileName == "git" && r.Arguments.Contains("rev-parse") && r.Arguments.Contains("origin/main")), Arg.Any<CancellationToken>())
+            .Returns(new ProcessResult(0, "base_sha\n", string.Empty, TimeSpan.FromMilliseconds(50)));
+
+        // diff base (against working tree)
+        _processRunner.RunAsync(Arg.Is<ProcessRequest>(r => r.FileName == "git" && r.Arguments.Contains("diff") && !r.Arguments.Contains("HEAD")), Arg.Any<CancellationToken>())
+            .Returns(new ProcessResult(0, "M\tsrc/App.cs\n", string.Empty, TimeSpan.FromMilliseconds(50)));
+
+        // untracked files
+        _processRunner.RunAsync(Arg.Is<ProcessRequest>(r => r.FileName == "git" && r.Arguments.Contains("ls-files")), Arg.Any<CancellationToken>())
+            .Returns(new ProcessResult(0, "src/NewUntracked.cs\n", string.Empty, TimeSpan.FromMilliseconds(50)));
+
+        var changeSet = await _gitService.GetChangeSetAsync(Environment.CurrentDirectory, baseCommit: "base_sha", includeWorkingTree: true);
+
+        changeSet.BaseCommit.Should().Be("base_sha");
+        changeSet.HeadCommit.Should().Be("WORKING_TREE");
+        changeSet.Files.Should().HaveCount(2);
+        changeSet.Files.Should().Contain(f => f.Path == "src/App.cs" && f.ChangeType == ChangeType.Modified);
+        changeSet.Files.Should().Contain(f => f.Path == "src/NewUntracked.cs" && f.ChangeType == ChangeType.Added);
+    }
 }

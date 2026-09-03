@@ -8,5 +8,6 @@ public interface IGitService
     Task<string> GetHeadCommitAsync(string workingDirectory, CancellationToken cancellationToken = default);
     Task<string?> GetMergeBaseAsync(string workingDirectory, string targetRef = "origin/main", CancellationToken cancellationToken = default);
     Task<string> ResolveBaseCommitAsync(string workingDirectory, string? explicitBase = null, CancellationToken cancellationToken = default);
-    Task<ChangeSet> GetChangeSetAsync(string workingDirectory, string? baseCommit = null, CancellationToken cancellationToken = default);
+    Task<bool> HasUncommittedChangesAsync(string workingDirectory, CancellationToken cancellationToken = default);
+    Task<ChangeSet> GetChangeSetAsync(string workingDirectory, string? baseCommit = null, bool includeWorkingTree = false, CancellationToken cancellationToken = default);
 }

@@ -32,6 +32,10 @@ public sealed partial class BuildGate : IQualityGate
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            if (context.Verbose)
+            {
+                Console.WriteLine($"[Verbose] [Build] Building project: {project} (Release)...");
+            }
             var timeout = TimeSpan.FromSeconds(context.Options.Execution.ProcessTimeoutSeconds);
             var buildResult = await _dotnetService.BuildAsync(project, "Release", timeout, cancellationToken).ConfigureAwait(false);
             totalDuration += buildResult.Duration;
