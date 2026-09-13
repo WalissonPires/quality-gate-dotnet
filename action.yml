@@ -305,16 +305,9 @@ runs:
         if [ "$INPUT_COMMAND" != "check" ] || [ "$INPUT_RATCHET" != "true" ]; then
           exit 0
         fi
+        RESOLVED=""
 
-        if [ -n "$INPUT_BASELINE_PATH" ]; then
-          if [ -f "$INPUT_BASELINE_PATH" ]; then
-            echo "resolved-baseline=$INPUT_BASELINE_PATH" >> "$GITHUB_OUTPUT"
-            echo "Using specified baseline file: $INPUT_BASELINE_PATH"
-          else
-            echo "::warning::Specified baseline-path '$INPUT_BASELINE_PATH' does not exist."
-          fi
-        elif [ "$INPUT_AUTO_EXTRACT_BASELINE" = "true" ]; then
-          TARGET_REF=""
+        if [ "$INPUT_AUTO_EXTRACT_BASELINE" = "true" ]; then
           CANDIDATES=()
           if [ -n "$INPUT_BASELINE_BRANCH" ]; then
             CANDIDATES+=("$INPUT_BASELINE_BRANCH" "origin/$INPUT_BASELINE_BRANCH")
@@ -324,25 +317,50 @@ runs:
           fi
           CANDIDATES+=("origin/main" "origin/master" "main" "master")
 
+          PATH_CANDIDATES=()
+          if [ -n "$INPUT_BASELINE_PATH" ]; then
+            PATH_CANDIDATES+=("$INPUT_BASELINE_PATH")
+          fi
+          PATH_CANDIDATES+=(".qualitygate/baseline.json" ".tools/quality-gate/baseline.json")
+
+          FOUND_REF=""
+          FOUND_PATH=""
           for REF in "${CANDIDATES[@]}"; do
             if [ -n "$REF" ] && git rev-parse --verify "$REF" >/dev/null 2>&1; then
-              if git cat-file -e "$REF:.qualitygate/baseline.json" 2>/dev/null; then
-                TARGET_REF="$REF"
-                break
-              fi
+              for BPATH in "${PATH_CANDIDATES[@]}"; do
+                if git cat-file -e "$REF:$BPATH" 2>/dev/null; then
+                  FOUND_REF="$REF"
+                  FOUND_PATH="$BPATH"
+                  break 2
+                fi
+              done
             fi
           done
 
-          if [ -n "$TARGET_REF" ]; then
+          if [ -n "$FOUND_REF" ] && [ -n "$FOUND_PATH" ]; then
             TEMP_DIR="${RUNNER_TEMP:-/tmp}/qualitygate-ratchet"
             mkdir -p "$TEMP_DIR"
             TARGET_FILE="$TEMP_DIR/baseline.json"
-            if git show "$TARGET_REF:.qualitygate/baseline.json" > "$TARGET_FILE" 2>/dev/null && [ -s "$TARGET_FILE" ]; then
+            if git show "$FOUND_REF:$FOUND_PATH" > "$TARGET_FILE" 2>/dev/null && [ -s "$TARGET_FILE" ]; then
+              RESOLVED="$TARGET_FILE"
               echo "resolved-baseline=$TARGET_FILE" >> "$GITHUB_OUTPUT"
-              echo "Successfully extracted baseline from $TARGET_REF to $TARGET_FILE"
+              echo "Successfully extracted baseline ($FOUND_PATH) from $FOUND_REF to $TARGET_FILE"
             fi
+          fi
+        fi
+
+        if [ -z "$RESOLVED" ]; then
+          if [ -n "$INPUT_BASELINE_PATH" ] && [ -f "$INPUT_BASELINE_PATH" ]; then
+            echo "resolved-baseline=$INPUT_BASELINE_PATH" >> "$GITHUB_OUTPUT"
+            echo "Using local baseline file: $INPUT_BASELINE_PATH"
+          elif [ -f ".qualitygate/baseline.json" ]; then
+            echo "resolved-baseline=.qualitygate/baseline.json" >> "$GITHUB_OUTPUT"
+            echo "Using local baseline file: .qualitygate/baseline.json"
+          elif [ -f ".tools/quality-gate/baseline.json" ]; then
+            echo "resolved-baseline=.tools/quality-gate/baseline.json" >> "$GITHUB_OUTPUT"
+            echo "Using local baseline file: .tools/quality-gate/baseline.json"
           else
-            echo "Notice: Baseline file (.qualitygate/baseline.json) not found on any candidate target ref. Ratchet check will skip gracefully."
+            echo "Notice: Baseline file not found on target ref or locally. Ratchet check will skip gracefully."
           fi
         fi
 
