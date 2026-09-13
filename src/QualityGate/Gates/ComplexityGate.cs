@@ -60,30 +60,96 @@ public sealed class ComplexityGate : IQualityGate
         // Check method complexity
         foreach (var method in analysis.Methods)
         {
-            if (method.CyclomaticComplexity > maxComplexityThreshold)
+            if (context.Ratchet && context.Baseline != null)
             {
-                findings.Add(new GateFinding(
-                    "CyclomaticComplexity",
-                    $"Cyclomatic complexity is {method.CyclomaticComplexity} (threshold: {maxComplexityThreshold}).",
-                    "Error",
-                    method.FilePath,
-                    $"{method.ClassName}.{method.MethodName}",
-                    method.LineNumber,
-                    actual: method.CyclomaticComplexity,
-                    threshold: maxComplexityThreshold));
-            }
+                int effectiveComplexityThreshold = maxComplexityThreshold;
+                bool isToleratedByBaseline = false;
+                string? featureName = null;
 
-            if (method.LineCount > maxMethodLinesThreshold)
+                if (context.Target.Scope == QualityScope.Diff)
+                {
+                    featureName = Application.ProjectDiscovery.FindFeatureForFile(method.FilePath);
+                    if (!string.IsNullOrWhiteSpace(featureName) && context.Baseline.Features.TryGetValue(featureName, out var baselineFeat))
+                    {
+                        isToleratedByBaseline = true;
+                        effectiveComplexityThreshold = Math.Max(maxComplexityThreshold, baselineFeat.MaxComplexity);
+                    }
+                }
+                else
+                {
+                    isToleratedByBaseline = true;
+                    effectiveComplexityThreshold = Math.Max(maxComplexityThreshold, context.Baseline.Metrics.MaxCyclomaticComplexity);
+                }
+
+                if (method.CyclomaticComplexity > effectiveComplexityThreshold)
+                {
+                    findings.Add(new GateFinding(
+                        "CyclomaticComplexity",
+                        $"Cyclomatic complexity is {method.CyclomaticComplexity} (exceeds baseline threshold of {effectiveComplexityThreshold}).",
+                        "Error",
+                        method.FilePath,
+                        $"{method.ClassName}.{method.MethodName}",
+                        method.LineNumber,
+                        actual: method.CyclomaticComplexity,
+                        threshold: effectiveComplexityThreshold));
+                }
+                else if (method.CyclomaticComplexity > maxComplexityThreshold)
+                {
+                    findings.Add(new GateFinding(
+                        "CyclomaticComplexity",
+                        $"Cyclomatic complexity is {method.CyclomaticComplexity} (tolerated by baseline threshold of {effectiveComplexityThreshold}).",
+                        "Warning",
+                        method.FilePath,
+                        $"{method.ClassName}.{method.MethodName}",
+                        method.LineNumber,
+                        actual: method.CyclomaticComplexity,
+                        threshold: effectiveComplexityThreshold));
+                }
+
+                if (method.LineCount > maxMethodLinesThreshold)
+                {
+                    string lineSeverity = isToleratedByBaseline && method.CyclomaticComplexity <= effectiveComplexityThreshold
+                        ? "Warning"
+                        : "Error";
+
+                    findings.Add(new GateFinding(
+                        "MethodLines",
+                        $"Method length is {method.LineCount} lines (threshold: {maxMethodLinesThreshold}).",
+                        lineSeverity,
+                        method.FilePath,
+                        $"{method.ClassName}.{method.MethodName}",
+                        method.LineNumber,
+                        actual: method.LineCount,
+                        threshold: maxMethodLinesThreshold));
+                }
+            }
+            else
             {
-                findings.Add(new GateFinding(
-                    "MethodLines",
-                    $"Method length is {method.LineCount} lines (threshold: {maxMethodLinesThreshold}).",
-                    "Error",
-                    method.FilePath,
-                    $"{method.ClassName}.{method.MethodName}",
-                    method.LineNumber,
-                    actual: method.LineCount,
-                    threshold: maxMethodLinesThreshold));
+                if (method.CyclomaticComplexity > maxComplexityThreshold)
+                {
+                    findings.Add(new GateFinding(
+                        "CyclomaticComplexity",
+                        $"Cyclomatic complexity is {method.CyclomaticComplexity} (threshold: {maxComplexityThreshold}).",
+                        "Error",
+                        method.FilePath,
+                        $"{method.ClassName}.{method.MethodName}",
+                        method.LineNumber,
+                        actual: method.CyclomaticComplexity,
+                        threshold: maxComplexityThreshold));
+                }
+
+                if (method.LineCount > maxMethodLinesThreshold)
+                {
+                    findings.Add(new GateFinding(
+                        "MethodLines",
+                        $"Method length is {method.LineCount} lines (threshold: {maxMethodLinesThreshold}).",
+                        "Error",
+                        method.FilePath,
+                        $"{method.ClassName}.{method.MethodName}",
+                        method.LineNumber,
+                        actual: method.LineCount,
+                        threshold: maxMethodLinesThreshold));
+                }
             }
         }
 

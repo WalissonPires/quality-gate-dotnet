@@ -267,4 +267,137 @@ public sealed class CheckCommandTests
         exitCode.Should().Be(0);
         await _gitService.Received(1).HasUncommittedChangesAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenDiffScopeAndRatchetEnabled_WithBaselineToleratedViolations_ReturnsExitCode0()
+    {
+        var tempBaseline = Path.GetTempFileName();
+        try
+        {
+            var baselineJson = """
+            {
+              "schemaVersion": 1,
+              "commit": "main",
+              "timestamp": "2026-09-01T00:00:00Z",
+              "toolVersion": "1.0.0",
+              "metrics": {
+                "lineCoverage": 80.0,
+                "branchCoverage": 70.0,
+                "totalTests": 10,
+                "failedTests": 0,
+                "totalWarnings": 0,
+                "architectureViolations": 17,
+                "maxCyclomaticComplexity": 22
+              },
+              "features": {
+                "Notifications": {
+                  "lineCoverage": 80.0,
+                  "branchCoverage": 70.0,
+                  "architectureViolations": 17,
+                  "maxComplexity": 22
+                }
+              }
+            }
+            """;
+            await File.WriteAllTextAsync(tempBaseline, baselineJson);
+
+            _gitService.GetChangeSetAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+                .Returns(new ChangeSet("base", "head", [new ChangedFile("backend/Features/Notifications/NotificationDispatcher.cs", ChangeType.Modified)]));
+
+            var archFinding = new GateFinding("ApplicationIsolation", "Using violation tolerated", "Warning", "backend/Features/Notifications/NotificationDispatcher.cs");
+            var compFinding = new GateFinding("CyclomaticComplexity", "Complexity 17 tolerated", "Warning", "backend/Features/Notifications/NotificationDispatcher.cs", actual: 17, threshold: 22);
+
+            var archGate = Substitute.For<IQualityGate>();
+            archGate.Name.Returns("Architecture");
+            archGate.ExecuteAsync(Arg.Any<QualityContext>(), Arg.Any<CancellationToken>())
+                .Returns(GateResult.Pass("Architecture", "Violations within baseline", TimeSpan.FromMilliseconds(10), [archFinding], actual: 1, threshold: 17));
+
+            var compGate = Substitute.For<IQualityGate>();
+            compGate.Name.Returns("Complexity");
+            compGate.ExecuteAsync(Arg.Any<QualityContext>(), Arg.Any<CancellationToken>())
+                .Returns(GateResult.Pass("Complexity", "Complexity within baseline", TimeSpan.FromMilliseconds(10), [compFinding], actual: 17, threshold: 22));
+
+            var exitCode = await CheckCommand.ExecuteAsync(
+                diff: true, ns: null, project: null, repository: false, baseRef: null,
+                format: "console", skip: [], only: [], failFast: false, verbose: false,
+                configPath: "qualitygate.json",
+                ratchet: true,
+                baselinePath: tempBaseline,
+                processRunner: _processRunner,
+                gitService: _gitService,
+                dotnetService: _dotnetService,
+                coverageParser: _coverageParser,
+                customGates: [archGate, compGate]);
+
+            exitCode.Should().Be(0);
+        }
+        finally
+        {
+            if (File.Exists(tempBaseline)) File.Delete(tempBaseline);
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenDiffScopeAndRatchetEnabled_WithRegression_ReturnsExitCode1()
+    {
+        var tempBaseline = Path.GetTempFileName();
+        try
+        {
+            var baselineJson = """
+            {
+              "schemaVersion": 1,
+              "commit": "main",
+              "timestamp": "2026-09-01T00:00:00Z",
+              "toolVersion": "1.0.0",
+              "metrics": {
+                "lineCoverage": 80.0,
+                "branchCoverage": 70.0,
+                "totalTests": 10,
+                "failedTests": 0,
+                "totalWarnings": 0,
+                "architectureViolations": 1,
+                "maxCyclomaticComplexity": 10
+              },
+              "features": {
+                "Notifications": {
+                  "lineCoverage": 80.0,
+                  "branchCoverage": 70.0,
+                  "architectureViolations": 1,
+                  "maxComplexity": 10
+                }
+              }
+            }
+            """;
+            await File.WriteAllTextAsync(tempBaseline, baselineJson);
+
+            _gitService.GetChangeSetAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+                .Returns(new ChangeSet("base", "head", [new ChangedFile("backend/Features/Notifications/NotificationDispatcher.cs", ChangeType.Modified)]));
+
+            var archFinding1 = new GateFinding("ApplicationIsolation", "Violation 1", "Warning", "backend/Features/Notifications/NotificationDispatcher.cs");
+            var archFinding2 = new GateFinding("ApplicationIsolation", "Violation 2 (regression)", "Error", "backend/Features/Notifications/NotificationDispatcher.cs");
+
+            var archGate = Substitute.For<IQualityGate>();
+            archGate.Name.Returns("Architecture");
+            archGate.ExecuteAsync(Arg.Any<QualityContext>(), Arg.Any<CancellationToken>())
+                .Returns(GateResult.Fail("Architecture", "Violations exceed baseline", TimeSpan.FromMilliseconds(10), [archFinding1, archFinding2], actual: 2, threshold: 1));
+
+            var exitCode = await CheckCommand.ExecuteAsync(
+                diff: true, ns: null, project: null, repository: false, baseRef: null,
+                format: "console", skip: [], only: [], failFast: false, verbose: false,
+                configPath: "qualitygate.json",
+                ratchet: true,
+                baselinePath: tempBaseline,
+                processRunner: _processRunner,
+                gitService: _gitService,
+                dotnetService: _dotnetService,
+                coverageParser: _coverageParser,
+                customGates: [archGate]);
+
+            exitCode.Should().Be(1);
+        }
+        finally
+        {
+            if (File.Exists(tempBaseline)) File.Delete(tempBaseline);
+        }
+    }
 }

@@ -125,4 +125,84 @@ public sealed class ComplexityGateTests
             Arg.Is<IEnumerable<string>>(files => !files.Any()),
             Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenDiffScopeAndMethodComplexityWithinFeatureBaseline_ReturnsPass()
+    {
+        var analysis = new ComplexityAnalysisResult(
+            [new MethodComplexity("DispatchAsync", "NotificationDispatcher", "backend/Features/Notifications/NotificationDispatcher.cs", 10, 17, 209)],
+            [new ClassComplexity("NotificationDispatcher", "backend/Features/Notifications/NotificationDispatcher.cs", 5, 250)]);
+
+        _analyzer.AnalyzeFilesAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
+            .Returns(analysis);
+
+        var options = new QualityGateOptions();
+        options.ChangedCode.MaxCyclomaticComplexity = 10;
+        options.ChangedCode.MaxMethodLines = 40;
+
+        var baseline = new QualityBaseline
+        {
+            Features = new Dictionary<string, FeatureMetrics>
+            {
+                ["Notifications"] = new(LineCoverage: 80m, BranchCoverage: 70m, ArchitectureViolations: 0, MaxComplexity: 22)
+            }
+        };
+
+        var context = new QualityContext(
+            QualityTarget.ForDiff(),
+            affectedProjects: ["backend/Wamage.csproj"],
+            testProjects: [],
+            options: options,
+            artifactDirectory: ".artifacts/test",
+            runId: "run1",
+            changeSet: new ChangeSet("base", "head", [new ChangedFile("backend/Features/Notifications/NotificationDispatcher.cs", ChangeType.Modified)]),
+            baseline: baseline,
+            ratchet: true);
+
+        var result = await _gate.ExecuteAsync(context);
+
+        result.Passed.Should().BeTrue();
+        result.Status.Should().Be(GateStatus.Passed);
+        result.Findings.Should().AllSatisfy(f => f.Severity.Should().Be("Warning"));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenDiffScopeAndMethodComplexityExceedsFeatureBaseline_ReturnsFail()
+    {
+        var analysis = new ComplexityAnalysisResult(
+            [new MethodComplexity("DispatchAsync", "NotificationDispatcher", "backend/Features/Notifications/NotificationDispatcher.cs", 10, 25, 209)],
+            [new ClassComplexity("NotificationDispatcher", "backend/Features/Notifications/NotificationDispatcher.cs", 5, 250)]);
+
+        _analyzer.AnalyzeFilesAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
+            .Returns(analysis);
+
+        var options = new QualityGateOptions();
+        options.ChangedCode.MaxCyclomaticComplexity = 10;
+        options.ChangedCode.MaxMethodLines = 40;
+
+        var baseline = new QualityBaseline
+        {
+            Features = new Dictionary<string, FeatureMetrics>
+            {
+                ["Notifications"] = new(LineCoverage: 80m, BranchCoverage: 70m, ArchitectureViolations: 0, MaxComplexity: 22)
+            }
+        };
+
+        var context = new QualityContext(
+            QualityTarget.ForDiff(),
+            affectedProjects: ["backend/Wamage.csproj"],
+            testProjects: [],
+            options: options,
+            artifactDirectory: ".artifacts/test",
+            runId: "run1",
+            changeSet: new ChangeSet("base", "head", [new ChangedFile("backend/Features/Notifications/NotificationDispatcher.cs", ChangeType.Modified)]),
+            baseline: baseline,
+            ratchet: true);
+
+        var result = await _gate.ExecuteAsync(context);
+
+        result.Passed.Should().BeFalse();
+        result.Status.Should().Be(GateStatus.Failed);
+        result.Findings.Should().Contain(f => f.Severity == "Error" && f.Rule == "CyclomaticComplexity");
+    }
 }

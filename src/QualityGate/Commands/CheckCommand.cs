@@ -232,6 +232,18 @@ public static class CheckCommand
             var reportJsonPath = Path.Combine(artifactDir, "report.json");
             var reportMdPath = Path.Combine(artifactDir, "report.md");
 
+            // Load Baseline if ratchet requested
+            QualityBaseline? baseline = null;
+            if (ratchet)
+            {
+                baseline = await BaselineLoader.LoadAsync(baselinePath, workingDir, cancellationToken).ConfigureAwait(false);
+                if (baseline == null)
+                {
+                    var resolvedBaselinePath = BaselineLoader.ResolvePath(baselinePath, workingDir);
+                    Console.Error.WriteLine($"⚠️  Warning: Ratchet mode enabled, but baseline file was not found at: '{resolvedBaselinePath}'. Ratchet checks skipped.");
+                }
+            }
+
             var context = new QualityContext(
                 target,
                 affectedProjects,
@@ -241,8 +253,9 @@ public static class CheckCommand
                 runId,
                 cancellationToken,
                 changeSet,
-                verbose);
-
+                verbose,
+                baseline,
+                ratchet && baseline != null);
             if (verbose)
             {
                 if (changeSet != null)
@@ -286,34 +299,25 @@ public static class CheckCommand
             bool ratchetPassed = true;
             RatchetEvaluationResult? ratchetResult = null;
 
-            if (ratchet)
+            if (ratchet && baseline != null)
             {
-                var baseline = await BaselineLoader.LoadAsync(baselinePath, workingDir, cancellationToken).ConfigureAwait(false);
-                if (baseline == null)
-                {
-                    var resolvedBaselinePath = BaselineLoader.ResolvePath(baselinePath, workingDir);
-                    Console.Error.WriteLine($"⚠️  Warning: Ratchet mode enabled, but baseline file was not found at: '{resolvedBaselinePath}'. Ratchet checks skipped.");
-                }
-                else
-                {
-                    // Discover coverage summary for ratchet feature evaluation
-                    var coverageFiles = Directory.Exists(artifactDir)
-                        ? Directory.GetFiles(artifactDir, "coverage.cobertura.xml", SearchOption.AllDirectories)
-                        : [];
-                    var covSummary = await coverageParser.ParseMultipleAsync(coverageFiles, cancellationToken).ConfigureAwait(false);
+                // Discover coverage summary for ratchet feature evaluation
+                var coverageFiles = Directory.Exists(artifactDir)
+                    ? Directory.GetFiles(artifactDir, "coverage.cobertura.xml", SearchOption.AllDirectories)
+                    : [];
+                var covSummary = await coverageParser.ParseMultipleAsync(coverageFiles, cancellationToken).ConfigureAwait(false);
 
-                    var affectedFeatures = changeSet != null
-                        ? changeSet.NonDeletedFiles
-                            .Select(f => ProjectDiscovery.FindFeatureForFile(f.Path))
-                            .Where(f => !string.IsNullOrEmpty(f))
-                            .Distinct()
-                            .Cast<string>()
-                            .ToList()
-                        : discovery.DiscoverFeatures();
+                var affectedFeatures = changeSet != null
+                    ? changeSet.NonDeletedFiles
+                        .Select(f => ProjectDiscovery.FindFeatureForFile(f.Path))
+                        .Where(f => !string.IsNullOrEmpty(f))
+                        .Distinct()
+                        .Cast<string>()
+                        .ToList()
+                    : discovery.DiscoverFeatures();
 
-                    ratchetResult = RatchetEvaluator.Evaluate(qualityResult, baseline, covSummary, affectedFeatures);
-                    ratchetPassed = ratchetResult.Passed;
-                }
+                ratchetResult = RatchetEvaluator.Evaluate(qualityResult, baseline, covSummary, affectedFeatures);
+                ratchetPassed = ratchetResult.Passed;
             }
 
             // Generate reports

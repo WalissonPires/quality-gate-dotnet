@@ -46,7 +46,130 @@ public sealed class ArchitectureGate : IQualityGate
 
         if (violations.Count > 0)
         {
-            var findings = violations.Select(v => new GateFinding(
+            if (context.Ratchet && context.Baseline != null)
+            {
+                var baseline = context.Baseline;
+                if (context.Target.Scope == QualityScope.Diff)
+                {
+                    var findings = new List<GateFinding>();
+                    bool hasErrors = false;
+                    int totalBaselineAllowed = 0;
+
+                    var violationsByFeature = violations.GroupBy(v =>
+                    {
+                        var feat = Application.ProjectDiscovery.FindFeatureForFile(v.FilePath);
+                        if (string.IsNullOrWhiteSpace(feat) && baseline.Features.Count > 0)
+                        {
+                            feat = baseline.Features.Keys.FirstOrDefault(f => v.SourceNamespace.Contains($".{f}.", StringComparison.OrdinalIgnoreCase));
+                        }
+                        return feat;
+                    });
+
+                    foreach (var group in violationsByFeature)
+                    {
+                        var featureName = group.Key;
+                        int countInFeature = group.Count();
+                        int allowedInFeature = 0;
+
+                        if (!string.IsNullOrWhiteSpace(featureName) && baseline.Features.TryGetValue(featureName, out var baselineFeat))
+                        {
+                            allowedInFeature = baselineFeat.ArchitectureViolations;
+                        }
+
+                        totalBaselineAllowed += allowedInFeature;
+
+                        if (countInFeature > allowedInFeature)
+                        {
+                            hasErrors = true;
+                            int i = 0;
+                            foreach (var v in group)
+                            {
+                                i++;
+                                string severity = i <= allowedInFeature ? "Warning" : "Error";
+                                string msg = severity == "Warning"
+                                    ? $"{v.Message} (Tolerated by baseline for feature '{featureName ?? "Unknown"}': {countInFeature} <= {allowedInFeature})"
+                                    : $"{v.Message} (Exceeds baseline threshold of {allowedInFeature} for feature '{featureName ?? "Unknown"}')";
+
+                                findings.Add(new GateFinding(v.RuleName, msg, severity, v.FilePath, null, v.LineNumber, countInFeature, allowedInFeature));
+                            }
+                        }
+                        else
+                        {
+                            foreach (var v in group)
+                            {
+                                var msg = $"{v.Message} (Tolerated by baseline for feature '{featureName ?? "Unknown"}': {countInFeature} <= {allowedInFeature})";
+                                findings.Add(new GateFinding(v.RuleName, msg, "Warning", v.FilePath, null, v.LineNumber, countInFeature, allowedInFeature));
+                            }
+                        }
+                    }
+
+                    if (hasErrors)
+                    {
+                        int errorCount = findings.Count(f => f.Severity.Equals("Error", StringComparison.OrdinalIgnoreCase));
+                        return GateResult.Fail(
+                            Name,
+                            $"{errorCount} architectural violation(s) exceeded baseline thresholds in affected features.",
+                            TimeSpan.Zero,
+                            findings,
+                            actual: violations.Count,
+                            threshold: totalBaselineAllowed);
+                    }
+
+                    return GateResult.Pass(
+                        Name,
+                        $"{violations.Count} architectural violation(s) found (all within baseline tolerance).",
+                        TimeSpan.Zero,
+                        findings,
+                        actual: violations.Count,
+                        threshold: totalBaselineAllowed);
+                }
+                else
+                {
+                    int allowedGlobal = baseline.Metrics.ArchitectureViolations;
+                    if (violations.Count > allowedGlobal)
+                    {
+                        var findings = violations.Select(v => new GateFinding(
+                            v.RuleName,
+                            $"{v.Message} (Global baseline: {allowedGlobal})",
+                            "Error",
+                            v.FilePath,
+                            member: null,
+                            line: v.LineNumber,
+                            actual: violations.Count,
+                            threshold: allowedGlobal)).ToList();
+
+                        return GateResult.Fail(
+                            Name,
+                            $"{violations.Count} architectural violation(s) found (exceeds baseline of {allowedGlobal}).",
+                            TimeSpan.Zero,
+                            findings,
+                            actual: violations.Count,
+                            threshold: allowedGlobal);
+                    }
+                    else
+                    {
+                        var findings = violations.Select(v => new GateFinding(
+                            v.RuleName,
+                            $"{v.Message} (Within global baseline tolerance of {allowedGlobal})",
+                            "Warning",
+                            v.FilePath,
+                            member: null,
+                            line: v.LineNumber,
+                            actual: violations.Count,
+                            threshold: allowedGlobal)).ToList();
+
+                        return GateResult.Pass(
+                            Name,
+                            $"{violations.Count} architectural violation(s) found (within baseline tolerance of {allowedGlobal}).",
+                            TimeSpan.Zero,
+                            findings,
+                            actual: violations.Count,
+                            threshold: allowedGlobal);
+                    }
+                }
+            }
+
+            var defaultFindings = violations.Select(v => new GateFinding(
                 v.RuleName,
                 v.Message,
                 "Error",
@@ -60,7 +183,7 @@ public sealed class ArchitectureGate : IQualityGate
                 Name,
                 $"{violations.Count} architectural violation(s) found.",
                 TimeSpan.Zero,
-                findings,
+                defaultFindings,
                 actual: violations.Count,
                 threshold: 0);
         }

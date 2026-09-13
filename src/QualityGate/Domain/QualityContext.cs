@@ -13,6 +13,9 @@ public sealed record QualityContext
     public CancellationToken CancellationToken { get; }
     public ChangeSet? ChangeSet { get; }
     public bool Verbose { get; }
+    public QualityBaseline? Baseline { get; }
+    public bool Ratchet { get; }
+
     public QualityContext(
         QualityTarget target,
         IEnumerable<string> affectedProjects,
@@ -22,7 +25,9 @@ public sealed record QualityContext
         string runId,
         CancellationToken cancellationToken = default,
         ChangeSet? changeSet = null,
-        bool verbose = false)
+        bool verbose = false,
+        QualityBaseline? baseline = null,
+        bool ratchet = false)
     {
         Target = target ?? throw new ArgumentNullException(nameof(target));
         AffectedProjects = (affectedProjects ?? []).ToList().AsReadOnly();
@@ -33,5 +38,7 @@ public sealed record QualityContext
         CancellationToken = cancellationToken;
         ChangeSet = changeSet;
         Verbose = verbose;
+        Baseline = baseline;
+        Ratchet = ratchet;
     }
 }
