@@ -221,7 +221,7 @@ Adicione a pasta `.qualitygate/artifacts/` ao arquivo `.gitignore` do seu projet
 
 ## Integração Contínua em Projetos Clientes (GitHub Actions)
 
-Abaixo estão exemplos de como integrar a CLI do Quality Gate nos fluxos de trabalho de qualquer repositório .NET cliente:
+A forma recomendada e mais simples de integrar o Quality Gate em pipelines do GitHub Actions é através da **Action Composta Oficial** (`WalissonPires/quality-gate-dotnet@v1`), que gerencia automaticamente a resolução da plataforma (Linux, Windows, macOS x64/arm64), download do binário, extração de baseline da branch de destino, execução das verificações e publicação do relatório Markdown no `GITHUB_STEP_SUMMARY`.
 
 ### 1. Verificação de Pull Request com Catraca (`.github/workflows/pr-quality-ratchet.yml`)
 
@@ -233,44 +233,29 @@ on:
     branches: [ main, master ]
 
 jobs:
-  check:
+  quality-gate:
+    name: Quality Gate Check
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # Necessário para histórico Git e diff
 
       - name: Setup .NET 10 SDK
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
 
-      - name: Download Quality Gate CLI
-        run: |
-          gh release download --repo <org>/quality-gate-dotnet --pattern "qualitygate-*-linux-x64.tar.gz"
-          tar -xzvf qualitygate-*-linux-x64.tar.gz
-          chmod +x qualitygate
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract Baseline from Main Branch
-        run: |
-          mkdir -p /tmp/ratchet
-          git show origin/main:.qualitygate/baseline.json > /tmp/ratchet/main-baseline.json 2>/dev/null || true
-
-      - name: Run Quality Gate Check
-        run: |
-          ./qualitygate check --diff --ratchet --baseline /tmp/ratchet/main-baseline.json --format both
-
-      - name: Publish Report to GitHub Actions Summary
-        if: always()
-        run: |
-          REPORT_MD=$(find .qualitygate/artifacts -name "report.md" | sort | tail -n 1)
-          if [ -n "$REPORT_MD" ] && [ -f "$REPORT_MD" ]; then
-            cat "$REPORT_MD" >> $GITHUB_STEP_SUMMARY
-          fi
+      - name: Run Quality Gate
+        uses: WalissonPires/quality-gate-dotnet@v1
+        with:
+          diff: 'true'
+          ratchet: 'true'
+          format: 'both'
+          summary: 'true'
 ```
+
 ### 2. Atualização Automática da Baseline no Merge (`.github/workflows/update-quality-baseline.yml`)
 
 ```yaml
@@ -282,6 +267,7 @@ on:
 
 jobs:
   record-baseline:
+    name: Record Baseline
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -294,23 +280,69 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Download Quality Gate CLI
-        run: |
-          gh release download --repo <org>/quality-gate-dotnet --pattern "qualitygate-*-linux-x64.tar.gz"
-          tar -xzvf qualitygate-*-linux-x64.tar.gz
-          chmod +x qualitygate
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Record Quality Baseline
+        uses: WalissonPires/quality-gate-dotnet@v1
+        with:
+          command: 'baseline-record'
+          baseline-path: '.qualitygate/baseline.json'
 
-      - name: Record and Commit New Baseline
+      - name: Commit and Push Baseline
         run: |
-          ./qualitygate baseline record --output .qualitygate/baseline.json
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .qualitygate/baseline.json
           git diff --staged --quiet || (git commit -m "chore(quality): update metrics baseline [skip ci]" && git push)
 ```
 
+### Versionamento e Pinning da Action
+
+- `uses: WalissonPires/quality-gate-dotnet@v1`: **Recomendado**. Tag flutuante para a versão principal 1.x, recebendo atualizações retrocompatíveis, correções de bugs e melhorias automaticamente.
+- `uses: WalissonPires/quality-gate-dotnet@v1.0.4`: Fixação imutável para uma versão pontual específica.
+
+### Referência de Entradas (`inputs`)
+
+| Entrada | Descrição | Padrão |
+|---|---|---|
+| `version` | Versão da CLI a baixar (`latest`, `1.0.4`, `v1.0.4`) | `latest` |
+| `command` | Modo de execução: `check`, `baseline-record` ou `setup` (apenas instala no `PATH`) | `check` |
+| `diff` | Avaliar apenas código modificado contra a referência base Git | `true` |
+| `working-tree` | Incluir alterações locais não commitadas (staged, unstaged, untracked) | `false` |
+| `repository` | Avaliar o repositório completo | `false` |
+| `project` | Caminho para um arquivo de projeto específico (`.csproj`) | `''` |
+| `namespace` | Namespace C# específico a avaliar | `''` |
+| `base` | Referência Git base para comparação de diff (`origin/main`, `HEAD~1`) | `''` |
+| `ratchet` | Ativar modo catraca contra baseline para prevenir regressão | `false` |
+| `baseline-path` | Caminho explícito para o arquivo JSON de baseline | `''` |
+| `auto-extract-baseline` | Se `ratchet: 'true'` e `baseline-path` vazio, extrai automaticamente `.qualitygate/baseline.json` da branch de destino | `true` |
+| `baseline-branch` | Branch/ref para extração da baseline (padrão: `github.base_ref` ou `origin/main`) | `''` |
+| `format` | Formato de saída no console (`both`, `console`, `markdown`, `json`) | `both` |
+| `skip` | Gates a ignorar separados por vírgula (`coverage,mutation`) | `''` |
+| `only` | Gates a executar com exclusividade (`build,test`) | `''` |
+| `fail-fast` | Interromper a execução no primeiro gate que falhar | `false` |
+| `verbose` | Ativar saída detalhada de diagnóstico | `false` |
+| `config` | Caminho para o arquivo de configuração `qualitygate.json` | `qualitygate.json` |
+| `summary` | Publicar relatório Markdown no `$GITHUB_STEP_SUMMARY` | `true` |
+| `token` | Token do GitHub para download de releases | `${{ github.token }}` |
+| `repo` | Repositório que hospeda as releases | `WalissonPires/quality-gate-dotnet` |
+| `qualitygate-path` | Caminho para binário pré-existente (ignora download) | `''` |
+| `install-dir` | Diretório para instalar o binário baixado | `${{ runner.temp }}/qualitygate-bin` |
+| `additional-args` | Argumentos extras repassados diretamente à CLI | `''` |
+
+### Referência de Saídas (`outputs`)
+
+| Saída | Descrição |
+|---|---|
+| `exit-code` | Código de saída da CLI (`0`=Sucesso, `1`=Falha de Qualidade, `2`=Configuração, `3`=Infraestrutura, `4`=Escopo, `5`=Erro Interno) |
+| `passed` | String booleana (`true` ou `false`) indicando se a esteira passou |
+| `run-id` | GUID único da execução gerado pela CLI |
+| `artifacts-dir` | Caminho para o diretório de artefatos `.qualitygate/artifacts/<runId>` |
+| `report-json` | Caminho para o arquivo `report.json` gerado |
+| `report-md` | Caminho para o arquivo `report.md` gerado |
+| `cli-version` | Versão da CLI Quality Gate instalada ou executada |
+
+### Instalação Manual da CLI (Ambientes Customizados)
+
+Para ambientes fora do GitHub Actions (como GitLab CI, Azure DevOps ou scripts locais), baixe os binários diretamente da página de [Releases](https://github.com/WalissonPires/quality-gate-dotnet/releases) correspondentes à sua plataforma (`linux-x64`, `linux-arm64`, `win-x64`, `osx-x64`, `osx-arm64`) e torne o executável disponível no seu `PATH`.
 ---
 
 ## Desenvolvimento e Contribuição

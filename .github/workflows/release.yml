@@ -194,3 +194,18 @@ jobs:
             ./downloaded-artifacts/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Floating Major Version Tag (e.g. v1)
+        if: needs.validate.outputs.is_prerelease == 'false' && needs.validate.outputs.is_draft == 'false'
+        run: |
+          TAG="${{ needs.validate.outputs.tag_name }}"
+          MAJOR_TAG="${TAG%%.*}"
+          if [[ "$MAJOR_TAG" =~ ^v[0-9]+$ ]]; then
+            echo "Updating floating major tag $MAJOR_TAG -> $TAG"
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git tag -fa "$MAJOR_TAG" -m "Release $TAG"
+            git push origin "$MAJOR_TAG" --force
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

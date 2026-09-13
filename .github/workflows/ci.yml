@@ -44,3 +44,42 @@ jobs:
 
       - name: Run unit tests
         run: dotnet test QualityGate.sln --configuration Release --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx"
+
+  test-composite-action:
+    name: Test Composite Action
+    needs: build-and-test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build local CLI executable
+        run: |
+          dotnet publish src/QualityGate/QualityGate.csproj \
+            -c Release \
+            -r linux-x64 \
+            --self-contained \
+            -p:PublishSingleFile=true \
+            -o ./publish
+
+      - name: Test Quality Gate Composite Action
+        uses: ./
+        with:
+          qualitygate-path: ./publish/qualitygate
+          diff: 'true'
+          only: 'build'
+          summary: 'true'
+
+      - name: Test Action Setup Mode
+        uses: ./
+        with:
+          command: 'setup'
+          version: 'latest'
