@@ -251,7 +251,7 @@ runs:
               fi
 
               RELEASE_JSON="$(curl -sSL "${AUTH_HEADER[@]}" -H "Accept: application/vnd.github+json" "$API_URL")"
-              DOWNLOAD_URL="$(echo "$RELEASE_JSON" | grep -o "https://[^\"]*${RID}\.${EXT}" | head -n 1)"
+              DOWNLOAD_URL="$(echo "$RELEASE_JSON" | grep -o "https://[^\"]*${RID}\.${EXT}" | head -n 1 || true)"
 
               if [ -z "$DOWNLOAD_URL" ]; then
                 echo "::error::Failed to find download URL for RID '$RID' in release response from $API_URL"
@@ -263,7 +263,7 @@ runs:
               curl -sSL "${AUTH_HEADER[@]}" -o "$INSTALL_DIR/$ARCHIVE_NAME" "$DOWNLOAD_URL"
             fi
 
-            ARCHIVE_FILE="$(ls -1 "$INSTALL_DIR"/*"${RID}.${EXT}" 2>/dev/null | head -n 1)"
+            ARCHIVE_FILE="$(ls -1 "$INSTALL_DIR"/*"${RID}.${EXT}" 2>/dev/null | head -n 1 || true)"
             if [ -z "$ARCHIVE_FILE" ] || [ ! -f "$ARCHIVE_FILE" ]; then
               echo "::error::Archive file matching *${RID}.${EXT} not found in $INSTALL_DIR."
               exit 1
@@ -474,7 +474,7 @@ runs:
           echo "passed=false" >> "$GITHUB_OUTPUT"
         fi
 
-        LATEST_ARTIFACT_DIR="$(ls -td .qualitygate/artifacts/*/ 2>/dev/null | head -n 1)"
+        LATEST_ARTIFACT_DIR="$(ls -td .qualitygate/artifacts/*/ 2>/dev/null | head -n 1 || true)"
         if [ -n "$LATEST_ARTIFACT_DIR" ] && [ -d "$LATEST_ARTIFACT_DIR" ]; then
           LATEST_ARTIFACT_DIR="${LATEST_ARTIFACT_DIR%/}"
           RUN_ID="$(basename "$LATEST_ARTIFACT_DIR")"
@@ -502,7 +502,7 @@ runs:
 
         REPORT_FILE="$REPORT_MD"
         if [ -z "$REPORT_FILE" ] || [ ! -f "$REPORT_FILE" ]; then
-          REPORT_FILE="$(find .qualitygate/artifacts -name "report.md" 2>/dev/null | sort | tail -n 1)"
+          REPORT_FILE="$(find .qualitygate/artifacts -name "report.md" 2>/dev/null | sort | tail -n 1 || true)"
         fi
 
         if [ -n "$REPORT_FILE" ] && [ -f "$REPORT_FILE" ]; then

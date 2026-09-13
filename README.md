@@ -221,7 +221,7 @@ Adicione a pasta `.qualitygate/artifacts/` ao arquivo `.gitignore` do seu projet
 
 ## Integração Contínua em Projetos Clientes (GitHub Actions)
 
-A forma recomendada e mais simples de integrar o Quality Gate em pipelines do GitHub Actions é através da **Action Composta Oficial** (`WalissonPires/quality-gate-dotnet@v1.0.6`), que gerencia automaticamente a resolução da plataforma (Linux, Windows, macOS x64/arm64), download do binário, extração de baseline da branch de destino, execução das verificações e publicação do relatório Markdown no `GITHUB_STEP_SUMMARY`.
+A forma recomendada e mais simples de integrar o Quality Gate em pipelines do GitHub Actions é através da **Action Composta Oficial** (`WalissonPires/quality-gate-dotnet@v1.0.7`), que gerencia automaticamente a resolução da plataforma (Linux, Windows, macOS x64/arm64), download do binário, extração de baseline da branch de destino, execução das verificações e publicação do relatório Markdown no `GITHUB_STEP_SUMMARY`.
 
 ### 1. Verificação de Pull Request com Catraca (`.github/workflows/pr-quality-ratchet.yml`)
 
@@ -248,7 +248,7 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Run Quality Gate
-        uses: WalissonPires/quality-gate-dotnet@v1.0.6
+        uses: WalissonPires/quality-gate-dotnet@v1.0.7
         with:
           diff: 'true'
           ratchet: 'true'
@@ -281,7 +281,7 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Record Quality Baseline
-        uses: WalissonPires/quality-gate-dotnet@v1.0.6
+        uses: WalissonPires/quality-gate-dotnet@v1.0.7
         with:
           command: 'baseline-record'
           baseline-path: '.qualitygate/baseline.json'
@@ -296,8 +296,8 @@ jobs:
 
 ### Versionamento da Action
 
-A action segue o versionamento SemVer padrão do repositório (`v1.0.6`, `v1.0.5`, etc.). Para fixar a versão em seus workflows, referencie a tag da release desejada:
-- `uses: WalissonPires/quality-gate-dotnet@v1.0.6`: Executa a versão `v1.0.6`.
+A action segue o versionamento SemVer padrão do repositório (`v1.0.7`, `v1.0.6`, etc.). Para fixar a versão em seus workflows, referencie a tag da release desejada:
+- `uses: WalissonPires/quality-gate-dotnet@v1.0.7`: Executa a versão `v1.0.7`.
 
 ### Referência de Entradas (`inputs`)
 
