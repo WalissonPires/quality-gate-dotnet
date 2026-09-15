@@ -73,7 +73,10 @@ public static class CheckCommand
             var exitCode = await ExecuteAsync(
                 diff, ns, project, repository, baseRef, format, skip, only, failFast, verbose, configPath,
                 ratchet, baselinePath, workingTree,
-                processRunner, gitService, dotnetService, coverageParser, customGates, context.GetCancellationToken());
+                processRunner, gitService, dotnetService, coverageParser, customGates,
+                consoleOut: null,
+                errorOut: null,
+                cancellationToken: context.GetCancellationToken());
 
             context.ExitCode = exitCode;
         });
@@ -101,21 +104,26 @@ public static class CheckCommand
         IDotnetService? dotnetService = null,
         ICoverageParser? coverageParser = null,
         IEnumerable<IQualityGate>? customGates = null,
+        TextWriter? consoleOut = null,
+        TextWriter? errorOut = null,
         CancellationToken cancellationToken = default)
     {
+        var outWriter = consoleOut ?? Console.Out;
+        var errWriter = errorOut ?? Console.Error;
+
         // Mutual exclusivity of skip and only
         var flatSkip = FlattenOptions(skip);
         var flatOnly = FlattenOptions(only);
         if (flatSkip.Count > 0 && flatOnly.Count > 0)
         {
-            Console.Error.WriteLine("Error: --skip and --only are mutually exclusive.");
+            errWriter.WriteLine("Error: --skip and --only are mutually exclusive.");
             return 2; // ConfigurationError
         }
 
         format = format.ToLowerInvariant();
         if (format is not ("console" or "json" or "markdown" or "md" or "both"))
         {
-            Console.Error.WriteLine($"Error: Invalid format '{format}'. Supported formats: console, json, markdown (or md), both.");
+            errWriter.WriteLine($"Error: Invalid format '{format}'. Supported formats: console, json, markdown (or md), both.");
             return 2;
         }
 
@@ -152,15 +160,15 @@ public static class CheckCommand
             var dotnetCheck = await processRunner.RunAsync(new ProcessRequest("dotnet", ["--version"], workingDir, TimeSpan.FromSeconds(10)), cancellationToken).ConfigureAwait(false);
             if (dotnetCheck.ExitCode != 0)
             {
-                Console.Error.WriteLine("Error: .NET SDK ('dotnet') is not available on PATH or failed to execute.");
+                errWriter.WriteLine("Error: .NET SDK ('dotnet') is not available on PATH or failed to execute.");
                 return 3; // InfrastructureError
             }
 
             if (verbose)
             {
-                Console.WriteLine($"[Verbose] .NET SDK Version: {dotnetCheck.StandardOutput.Trim()}");
-                Console.WriteLine($"[Verbose] Working Directory: {workingDir}");
-                Console.WriteLine($"[Verbose] Target Scope: diff={diff}, ns={ns}, proj={project}, repo={repository}, ratchet={ratchet}");
+                outWriter.WriteLine($"[Verbose] .NET SDK Version: {dotnetCheck.StandardOutput.Trim()}");
+                outWriter.WriteLine($"[Verbose] Working Directory: {workingDir}");
+                outWriter.WriteLine($"[Verbose] Target Scope: diff={diff}, ns={ns}, proj={project}, repo={repository}, ratchet={ratchet}");
             }
 
             // Resolve target
@@ -178,10 +186,10 @@ public static class CheckCommand
                     var hasUncommitted = await gitService.HasUncommittedChangesAsync(workingDir, cancellationToken).ConfigureAwait(false);
                     if (hasUncommitted)
                     {
-                        Console.WriteLine();
-                        Console.WriteLine("⚠️  Warning: No changes found between commits, but uncommitted local changes exist in your working directory.");
-                        Console.WriteLine("   To analyze local uncommitted changes, run with: qualitygate check --diff --working-tree");
-                        Console.WriteLine();
+                        outWriter.WriteLine();
+                        outWriter.WriteLine("⚠️  Warning: No changes found between commits, but uncommitted local changes exist in your working directory.");
+                        outWriter.WriteLine("   To analyze local uncommitted changes, run with: qualitygate check --diff --working-tree");
+                        outWriter.WriteLine();
                     }
                 }
             }
@@ -260,13 +268,13 @@ public static class CheckCommand
             {
                 if (changeSet != null)
                 {
-                    Console.WriteLine($"[Verbose] ChangeSet: {changeSet.Files.Count} changed file(s) (base: {changeSet.BaseCommit}, head: {changeSet.HeadCommit}).");
-                    Console.WriteLine($"[Verbose] C# source files in diff: {changeSet.CSharpSourceFiles.Count}");
+                    outWriter.WriteLine($"[Verbose] ChangeSet: {changeSet.Files.Count} changed file(s) (base: {changeSet.BaseCommit}, head: {changeSet.HeadCommit}).");
+                    outWriter.WriteLine($"[Verbose] C# source files in diff: {changeSet.CSharpSourceFiles.Count}");
                 }
-                Console.WriteLine($"[Verbose] Discovered {allProjects.Count} total project(s).");
-                Console.WriteLine($"[Verbose] Affected projects ({affectedProjects.Count}): {(affectedProjects.Count > 0 ? string.Join(", ", affectedProjects) : "none")}");
-                Console.WriteLine($"[Verbose] Test projects ({testProjects.Count}): {(testProjects.Count > 0 ? string.Join(", ", testProjects) : "none")}");
-                Console.WriteLine($"[Verbose] Artifacts directory: {artifactDir}");
+                outWriter.WriteLine($"[Verbose] Discovered {allProjects.Count} total project(s).");
+                outWriter.WriteLine($"[Verbose] Affected projects ({affectedProjects.Count}): {(affectedProjects.Count > 0 ? string.Join(", ", affectedProjects) : "none")}");
+                outWriter.WriteLine($"[Verbose] Test projects ({testProjects.Count}): {(testProjects.Count > 0 ? string.Join(", ", testProjects) : "none")}");
+                outWriter.WriteLine($"[Verbose] Artifacts directory: {artifactDir}");
             }
 
             // Instantiate default gates if none provided
@@ -336,14 +344,14 @@ public static class CheckCommand
                 var jsonReporter = new JsonReporter();
                 var jsonContent = jsonReporter.Serialize(qualityResult);
                 await File.WriteAllTextAsync(reportJsonPath, jsonContent, cancellationToken).ConfigureAwait(false);
-                Console.WriteLine(jsonContent);
+                outWriter.WriteLine(jsonContent);
             }
             else if (format is "markdown" or "md")
             {
                 var markdownReporter = new MarkdownReporter();
                 var mdContent = markdownReporter.Serialize(qualityResult);
                 await File.WriteAllTextAsync(reportMdPath, mdContent, cancellationToken).ConfigureAwait(false);
-                Console.WriteLine(mdContent);
+                outWriter.WriteLine(mdContent);
             }
             else if (format == "both")
             {
@@ -356,7 +364,7 @@ public static class CheckCommand
                 await File.WriteAllTextAsync(reportMdPath, mdContent, cancellationToken).ConfigureAwait(false);
 
                 var consoleReporter = new ConsoleReporter([reportJsonPath, reportMdPath]);
-                await consoleReporter.ReportAsync(qualityResult, Console.Out, cancellationToken).ConfigureAwait(false);
+                await consoleReporter.ReportAsync(qualityResult, outWriter, cancellationToken).ConfigureAwait(false);
             }
             else // console
             {
@@ -365,7 +373,7 @@ public static class CheckCommand
                 await File.WriteAllTextAsync(reportJsonPath, jsonContent, cancellationToken).ConfigureAwait(false);
 
                 var consoleReporter = new ConsoleReporter(reportJsonPath);
-                await consoleReporter.ReportAsync(qualityResult, Console.Out, cancellationToken).ConfigureAwait(false);
+                await consoleReporter.ReportAsync(qualityResult, outWriter, cancellationToken).ConfigureAwait(false);
             }
 
 
@@ -401,17 +409,17 @@ public static class CheckCommand
         }
         catch (ConfigurationException ex)
         {
-            Console.Error.WriteLine($"Configuration error: {ex.Message}");
+            errWriter.WriteLine($"Configuration error: {ex.Message}");
             return 2;
         }
         catch (ScopeException ex)
         {
-            Console.Error.WriteLine($"Scope error: {ex.Message}");
+            errWriter.WriteLine($"Scope error: {ex.Message}");
             return 4;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            Console.Error.WriteLine($"Unexpected internal error: {ex}");
+            errWriter.WriteLine($"Unexpected internal error: {ex}");
             return 5;
         }
     }

@@ -147,9 +147,7 @@ public sealed class BaselineCommandTests
     public async Task RecordAsync_VerboseMode_ShouldSucceedAndPrintDiagnostics()
     {
         var tempFile = Path.Combine(Path.GetTempPath(), $"baseline-verbose-{Guid.NewGuid():N}.json");
-        var originalOut = Console.Out;
         using var sw = new System.IO.StringWriter();
-        Console.SetOut(sw);
 
         try
         {
@@ -162,7 +160,8 @@ public sealed class BaselineCommandTests
                 dotnetService: _dotnetService,
                 coverageParser: _coverageParser,
                 architectureValidator: _architectureValidator,
-                complexityAnalyzer: _complexityAnalyzer);
+                complexityAnalyzer: _complexityAnalyzer,
+                consoleOut: sw);
 
             var output = sw.ToString();
             exitCode.Should().Be(0);
@@ -171,7 +170,6 @@ public sealed class BaselineCommandTests
         }
         finally
         {
-            Console.SetOut(originalOut);
             if (File.Exists(tempFile)) File.Delete(tempFile);
         }
     }

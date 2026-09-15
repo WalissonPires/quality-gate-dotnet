@@ -47,7 +47,9 @@ public static class BaselineCommand
                 project,
                 null,
                 processRunner, gitService, dotnetService, coverageParser, architectureValidator, complexityAnalyzer,
-                context.GetCancellationToken()).ConfigureAwait(false);
+                consoleOut: null,
+                errorOut: null,
+                cancellationToken: context.GetCancellationToken()).ConfigureAwait(false);
 
             context.ExitCode = exitCode;
         });
@@ -68,8 +70,13 @@ public static class BaselineCommand
         ICoverageParser? coverageParser = null,
         IArchitectureValidator? architectureValidator = null,
         IComplexityAnalyzer? complexityAnalyzer = null,
+        TextWriter? consoleOut = null,
+        TextWriter? errorOut = null,
         CancellationToken cancellationToken = default)
     {
+        var outWriter = consoleOut ?? Console.Out;
+        var errWriter = errorOut ?? Console.Error;
+
         try
         {
             var workingDir = FindRepositoryRoot(string.IsNullOrWhiteSpace(workingDirectory) ? Environment.CurrentDirectory : workingDirectory);
@@ -122,7 +129,7 @@ public static class BaselineCommand
             var discoveredFeatures = discovery.DiscoverFeatures();
             if (verbose)
             {
-                Console.WriteLine($"[Verbose] Discovered {sourceProjects.Count} source projects, {testProjects.Count} test projects, {discoveredFeatures.Count} features.");
+                outWriter.WriteLine($"[Verbose] Discovered {sourceProjects.Count} source projects, {testProjects.Count} test projects, {discoveredFeatures.Count} features.");
             }
 
             // 4. Build and Collect Warnings
@@ -149,13 +156,13 @@ public static class BaselineCommand
                 failedTests += testRes.FailedTests;
                 if (verbose)
                 {
-                    Console.WriteLine($"[Verbose] Test project: {testProj}");
-                    Console.WriteLine($"[Verbose]   Results dir : {resultsDir}");
-                    Console.WriteLine($"[Verbose]   Tests       : total={testRes.TotalTests} passed={testRes.PassedTests} failed={testRes.FailedTests}");
+                    outWriter.WriteLine($"[Verbose] Test project: {testProj}");
+                    outWriter.WriteLine($"[Verbose]   Results dir : {resultsDir}");
+                    outWriter.WriteLine($"[Verbose]   Tests       : total={testRes.TotalTests} passed={testRes.PassedTests} failed={testRes.FailedTests}");
                     if (testRes.CoverageReportPath is not null)
-                        Console.WriteLine($"[Verbose]   Coverage XML: {testRes.CoverageReportPath}");
+                        outWriter.WriteLine($"[Verbose]   Coverage XML: {testRes.CoverageReportPath}");
                     else
-                        Console.WriteLine($"[Verbose]   Coverage XML: not found");
+                        outWriter.WriteLine($"[Verbose]   Coverage XML: not found");
                 }
             }
 
@@ -165,17 +172,17 @@ public static class BaselineCommand
             var coverageSummary = await coverageParser.ParseMultipleAsync(coverageFiles, cancellationToken).ConfigureAwait(false);
             if (verbose)
             {
-                Console.WriteLine($"[Verbose] Coverage files found: {coverageFiles.Length}");
-                foreach (var f in coverageFiles) Console.WriteLine($"[Verbose]   {f}");
-                Console.WriteLine($"[Verbose] Coverage summary: lines-valid={coverageSummary.TotalLines} lines-covered={coverageSummary.CoveredLines} branches-valid={coverageSummary.TotalBranches} branches-covered={coverageSummary.CoveredBranches}");
+                outWriter.WriteLine($"[Verbose] Coverage files found: {coverageFiles.Length}");
+                foreach (var f in coverageFiles) outWriter.WriteLine($"[Verbose]   {f}");
+                outWriter.WriteLine($"[Verbose] Coverage summary: lines-valid={coverageSummary.TotalLines} lines-covered={coverageSummary.CoveredLines} branches-valid={coverageSummary.TotalBranches} branches-covered={coverageSummary.CoveredBranches}");
             }
 
             // Sanity guard: refuse to record baseline when coverage is provably untrustworthy
             if (failedTests == 0 && coverageSummary.TotalLines > 0 && coverageSummary.CoveredLines == 0)
             {
-                Console.Error.WriteLine("Coverage collection produced zero covered lines with passing tests. Baseline aborted because the artifact is not trustworthy.");
+                errWriter.WriteLine("Coverage collection produced zero covered lines with passing tests. Baseline aborted because the artifact is not trustworthy.");
                 // Preserve artifacts for diagnosis instead of deleting them
-                Console.Error.WriteLine($"Artifacts preserved for diagnosis at: {tempArtifactDir}");
+                errWriter.WriteLine($"Artifacts preserved for diagnosis at: {tempArtifactDir}");
                 return 3;
             }
             var allCsFiles = Directory.GetFiles(workingDir, "*.cs", SearchOption.AllDirectories)
@@ -265,27 +272,27 @@ public static class BaselineCommand
 
             // 10. Display Summary
             var resolvedOutputPath = BaselineLoader.ResolvePath(outputPath, workingDir);
-            Console.WriteLine($"✅ Baseline successfully recorded to: {resolvedOutputPath}");
-            Console.WriteLine();
-            Console.WriteLine($"Global Metrics:");
-            Console.WriteLine($"  - Commit: {headCommit[..Math.Min(8, headCommit.Length)]}");
-            Console.WriteLine($"  - Line Coverage: {globalMetrics.LineCoverage:0.#}%");
-            Console.WriteLine($"  - Total Tests: {globalMetrics.TotalTests} (Failed: {globalMetrics.FailedTests})");
-            Console.WriteLine($"  - Compiler Warnings: {globalMetrics.TotalWarnings}");
-            Console.WriteLine($"  - Architecture Violations: {globalMetrics.ArchitectureViolations}");
-            Console.WriteLine($"  - Max Cyclomatic Complexity: {globalMetrics.MaxCyclomaticComplexity}");
-            Console.WriteLine();
-            Console.WriteLine($"Features Recorded ({featureMetricsDict.Count}):");
+            outWriter.WriteLine($"✅ Baseline successfully recorded to: {resolvedOutputPath}");
+            outWriter.WriteLine();
+            outWriter.WriteLine($"Global Metrics:");
+            outWriter.WriteLine($"  - Commit: {headCommit[..Math.Min(8, headCommit.Length)]}");
+            outWriter.WriteLine($"  - Line Coverage: {globalMetrics.LineCoverage:0.#}%");
+            outWriter.WriteLine($"  - Total Tests: {globalMetrics.TotalTests} (Failed: {globalMetrics.FailedTests})");
+            outWriter.WriteLine($"  - Compiler Warnings: {globalMetrics.TotalWarnings}");
+            outWriter.WriteLine($"  - Architecture Violations: {globalMetrics.ArchitectureViolations}");
+            outWriter.WriteLine($"  - Max Cyclomatic Complexity: {globalMetrics.MaxCyclomaticComplexity}");
+            outWriter.WriteLine();
+            outWriter.WriteLine($"Features Recorded ({featureMetricsDict.Count}):");
             foreach (var (feat, m) in featureMetricsDict)
             {
                 var covStr = m.LineCoverage.HasValue ? $"{m.LineCoverage.Value:0.#}%" : "N/A";
-                Console.WriteLine($"  - {feat,-16}: Coverage={covStr,-6} Violations={m.ArchitectureViolations,-3} MaxComplexity={m.MaxComplexity}");
+                outWriter.WriteLine($"  - {feat,-16}: Coverage={covStr,-6} Violations={m.ArchitectureViolations,-3} MaxComplexity={m.MaxComplexity}");
             }
             return 0;
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error recording baseline: {ex.Message}");
+            errWriter.WriteLine($"Error recording baseline: {ex.Message}");
             return 3;
         }
     }

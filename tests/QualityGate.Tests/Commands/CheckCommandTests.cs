@@ -143,30 +143,22 @@ public sealed class CheckCommandTests
             .Returns(GateResult.Pass("Build", "Succeeded", TimeSpan.FromSeconds(1)));
 
         using var sw = new StringWriter();
-        var originalOut = Console.Out;
-        Console.SetOut(sw);
 
-        try
-        {
-            var exitCode = await CheckCommand.ExecuteAsync(
-                diff: true, ns: null, project: null, repository: false, baseRef: null,
-                format: format, skip: [], only: [], failFast: false, verbose: false,
-                configPath: "qualitygate.json",
-                processRunner: _processRunner,
-                gitService: _gitService,
-                dotnetService: _dotnetService,
-                coverageParser: _coverageParser,
-                customGates: [gate]);
+        var exitCode = await CheckCommand.ExecuteAsync(
+            diff: true, ns: null, project: null, repository: false, baseRef: null,
+            format: format, skip: [], only: [], failFast: false, verbose: false,
+            configPath: "qualitygate.json",
+            processRunner: _processRunner,
+            gitService: _gitService,
+            dotnetService: _dotnetService,
+            coverageParser: _coverageParser,
+            customGates: [gate],
+            consoleOut: sw);
 
-            exitCode.Should().Be(0);
-            var output = sw.ToString();
-            output.Should().Contain("# Wamage Quality Gate Report");
-            output.Should().Contain("✅ **PASSED**");
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-        }
+        exitCode.Should().Be(0);
+        var output = sw.ToString();
+        output.Should().Contain("# Wamage Quality Gate Report");
+        output.Should().Contain("✅ **PASSED**");
     }
 
     [Fact]
