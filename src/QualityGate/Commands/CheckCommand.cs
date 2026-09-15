@@ -318,6 +318,16 @@ public static class CheckCommand
 
                 ratchetResult = RatchetEvaluator.Evaluate(qualityResult, baseline, covSummary, affectedFeatures);
                 ratchetPassed = ratchetResult.Passed;
+
+                qualityResult = new QualityResult(
+                    qualityResult.Passed,
+                    qualityResult.Target,
+                    qualityResult.Gates,
+                    qualityResult.Duration,
+                    qualityResult.ToolVersion,
+                    qualityResult.RunId,
+                    qualityResult.ChangeSet,
+                    ratchetResult);
             }
 
             // Generate reports
@@ -358,20 +368,6 @@ public static class CheckCommand
                 await consoleReporter.ReportAsync(qualityResult, Console.Out, cancellationToken).ConfigureAwait(false);
             }
 
-            if (format is "console" or "both" && ratchetResult != null)
-            {
-                Console.WriteLine();
-                Console.WriteLine("QUALITY RATCHET VERIFICATION:");
-                foreach (var summary in ratchetResult.Summaries)
-                {
-                    Console.WriteLine($"  {summary}");
-                }
-
-                if (!ratchetResult.Passed)
-                {
-                    Console.WriteLine("  ❌ RATCHET VIOLATION: Quality metrics have regressed compared to baseline.");
-                }
-            }
 
             // Cleanup artifacts if passed, or keep for diagnosis
             if (qualityResult.Passed && ratchetPassed)

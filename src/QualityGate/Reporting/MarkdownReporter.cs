@@ -74,6 +74,51 @@ public sealed class MarkdownReporter : IReporter
             sb.AppendLine($"| {gate.Gate} | {statusIcon} | {actual} | {threshold} | {duration} | {message} |");
         }
 
+        // Ratchet Verification Section
+        if (result.Ratchet != null)
+        {
+            sb.AppendLine("## Quality Ratchet Verification");
+            sb.AppendLine();
+
+            var ratchetBadge = result.Ratchet.Passed ? "✅ **PASSED**" : "❌ **FAILED**";
+            var ratchetDesc = result.Ratchet.Passed
+                ? "All evaluated quality metrics met or exceeded baseline levels."
+                : "Quality metrics have regressed compared to baseline.";
+            sb.AppendLine($"> **Status:** {ratchetBadge} — {ratchetDesc}");
+            sb.AppendLine();
+
+            if (result.Ratchet.Summaries.Count > 0)
+            {
+                sb.AppendLine("### Summary");
+                sb.AppendLine();
+                foreach (var summary in result.Ratchet.Summaries)
+                {
+                    sb.AppendLine($"- {summary}");
+                }
+                sb.AppendLine();
+            }
+
+            if (result.Ratchet.Findings.Count > 0)
+            {
+                sb.AppendLine("### Regressions");
+                sb.AppendLine();
+                sb.AppendLine("| Rule | Target | Current | Baseline | Message |");
+                sb.AppendLine("| :--- | :--- | :---: | :---: | :--- |");
+
+                foreach (var finding in result.Ratchet.Findings)
+                {
+                    var rule = finding.Rule;
+                    var targetStr = !string.IsNullOrEmpty(finding.File) ? $"`{finding.File}`" : "Global";
+                    var actualStr = finding.Actual.HasValue ? finding.Actual.Value.ToString("0.#", CultureInfo.InvariantCulture) : "—";
+                    var thresholdStr = finding.Threshold.HasValue ? finding.Threshold.Value.ToString("0.#", CultureInfo.InvariantCulture) : "—";
+                    var message = EscapeMarkdownTable(finding.Message);
+
+                    sb.AppendLine($"| {rule} | {targetStr} | {actualStr} | {thresholdStr} | {message} |");
+                }
+                sb.AppendLine();
+            }
+        }
+
         sb.AppendLine();
 
         // Findings Details

@@ -51,4 +51,54 @@ public sealed class JsonReporterTests
         coverageGate.GetProperty("threshold").GetDecimal().Should().Be(80);
         coverageGate.GetProperty("findings").GetArrayLength().Should().Be(1);
     }
+
+    [Fact]
+    public async Task ReportAsync_WhenRatchetResultPresent_SerializesRatchetObject()
+    {
+        var target = QualityTarget.ForDiff();
+        var gates = new List<GateResult>
+        {
+            GateResult.Pass("Build", "Build succeeded.", TimeSpan.FromSeconds(1))
+        };
+
+        var ratchetFinding = new GateFinding("Ratchet.FeatureCoverage", "Line coverage dropped", "Error", "Features/Channels", actual: 80m, threshold: 85m);
+        var ratchetResult = new QualityGate.Application.RatchetEvaluationResult(
+            Passed: false,
+            Findings: [ratchetFinding],
+            Summaries: ["❌ Coverage dropped"]);
+
+        var qualityResult = new QualityResult(true, target, gates, TimeSpan.FromSeconds(2), "1.0.0", "run-id", null, ratchetResult);
+
+        var reporter = new JsonReporter();
+        using var writer = new StringWriter();
+        await reporter.ReportAsync(qualityResult, writer);
+
+        var json = writer.ToString();
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        root.GetProperty("passed").GetBoolean().Should().BeFalse();
+        root.TryGetProperty("ratchet", out var ratchetProp).Should().BeTrue();
+        ratchetProp.GetProperty("passed").GetBoolean().Should().BeFalse();
+        ratchetProp.GetProperty("summaries").GetArrayLength().Should().Be(1);
+        ratchetProp.GetProperty("findings").GetArrayLength().Should().Be(1);
+        ratchetProp.GetProperty("findings")[0].GetProperty("rule").GetString().Should().Be("Ratchet.FeatureCoverage");
+    }
+
+    [Fact]
+    public async Task ReportAsync_WhenRatchetResultNull_DoesNotIncludeRatchetProperty()
+    {
+        var target = QualityTarget.ForDiff();
+        var qualityResult = new QualityResult(true, target, [], TimeSpan.FromSeconds(1), "1.0.0", "run-id", null, null);
+
+        var reporter = new JsonReporter();
+        using var writer = new StringWriter();
+        await reporter.ReportAsync(qualityResult, writer);
+
+        var json = writer.ToString();
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        root.TryGetProperty("ratchet", out _).Should().BeFalse();
+    }
 }

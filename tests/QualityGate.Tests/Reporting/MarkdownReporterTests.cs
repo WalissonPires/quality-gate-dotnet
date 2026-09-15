@@ -102,4 +102,78 @@ public sealed class MarkdownReporterTests
         markdown.Should().Contain("Message with \\| pipe and   newline");
         markdown.Should().Contain("Finding \\| pipe   newline");
     }
+
+    [Fact]
+    public async Task ReportAsync_WhenRatchetHasViolations_OutputsFailedStatusAndRatchetSection()
+    {
+        var target = QualityTarget.ForDiff();
+        var gates = new List<GateResult>
+        {
+            GateResult.Pass("Build", "Build succeeded.", TimeSpan.FromSeconds(1)),
+            GateResult.Pass("Test", "All tests passed.", TimeSpan.FromSeconds(2)),
+            GateResult.Pass("Coverage", "Changed line coverage is 83.1%.", TimeSpan.FromSeconds(1))
+        };
+
+        var ratchetFinding = new GateFinding("Ratchet.FeatureCoverage", "Line coverage for feature 'Channels' decreased by 0.7% (baseline: 82.8%, current: 82.1%).", "Error", "Features/Channels", actual: 82.1m, threshold: 82.8m);
+        var ratchetResult = new QualityGate.Application.RatchetEvaluationResult(
+            Passed: false,
+            Findings: [ratchetFinding],
+            Summaries:
+            [
+                "❌ Line coverage for feature 'Channels' decreased by 0.7% (baseline: 82.8%, current: 82.1%).",
+                "✅ Feature 'Channels' architecture violations: 0 <= 3 (baseline)."
+            ]);
+
+        var qualityResult = new QualityResult(true, target, gates, TimeSpan.FromSeconds(4), "1.0.0", "run-ratchet-fail", null, ratchetResult);
+
+        qualityResult.Passed.Should().BeFalse();
+
+        var reporter = new MarkdownReporter();
+        using var writer = new StringWriter();
+        await reporter.ReportAsync(qualityResult, writer);
+
+        var markdown = writer.ToString();
+
+        markdown.Should().Contain("> **Status:** ❌ **FAILED**");
+        markdown.Should().Contain("## Quality Ratchet Verification");
+        markdown.Should().Contain("> **Status:** ❌ **FAILED** — Quality metrics have regressed compared to baseline.");
+        markdown.Should().Contain("- ❌ Line coverage for feature 'Channels' decreased by 0.7%");
+        markdown.Should().Contain("- ✅ Feature 'Channels' architecture violations: 0 <= 3");
+        markdown.Should().Contain("### Regressions");
+        markdown.Should().Contain("| Ratchet.FeatureCoverage | `Features/Channels` | 82.1 | 82.8 | Line coverage for feature 'Channels' decreased by 0.7% (baseline: 82.8%, current: 82.1%). |");
+    }
+
+    [Fact]
+    public async Task ReportAsync_WhenRatchetPassed_OutputsPassedStatusAndRatchetSection()
+    {
+        var target = QualityTarget.ForDiff();
+        var gates = new List<GateResult>
+        {
+            GateResult.Pass("Build", "Build succeeded.", TimeSpan.FromSeconds(1))
+        };
+
+        var ratchetResult = new QualityGate.Application.RatchetEvaluationResult(
+            Passed: true,
+            Findings: [],
+            Summaries:
+            [
+                "✅ Feature 'Channels' coverage: 85.0% >= 82.8% (baseline)."
+            ]);
+
+        var qualityResult = new QualityResult(true, target, gates, TimeSpan.FromSeconds(2), "1.0.0", "run-ratchet-pass", null, ratchetResult);
+
+        qualityResult.Passed.Should().BeTrue();
+
+        var reporter = new MarkdownReporter();
+        using var writer = new StringWriter();
+        await reporter.ReportAsync(qualityResult, writer);
+
+        var markdown = writer.ToString();
+
+        markdown.Should().Contain("> **Status:** ✅ **PASSED**");
+        markdown.Should().Contain("## Quality Ratchet Verification");
+        markdown.Should().Contain("> **Status:** ✅ **PASSED** — All evaluated quality metrics met or exceeded baseline levels.");
+        markdown.Should().Contain("- ✅ Feature 'Channels' coverage: 85.0% >= 82.8%");
+        markdown.Should().NotContain("### Regressions");
+    }
 }

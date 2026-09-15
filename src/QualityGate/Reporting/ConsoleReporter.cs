@@ -72,6 +72,21 @@ public sealed class ConsoleReporter : IReporter
 
             await writer.WriteLineAsync().ConfigureAwait(false);
         }
+        if (result.Ratchet != null)
+        {
+            await writer.WriteLineAsync("QUALITY RATCHET VERIFICATION:").ConfigureAwait(false);
+            foreach (var summary in result.Ratchet.Summaries)
+            {
+                await writer.WriteLineAsync($"  {summary}").ConfigureAwait(false);
+            }
+
+            if (!result.Ratchet.Passed)
+            {
+                await writer.WriteLineAsync("  ❌ RATCHET VIOLATION: Quality metrics have regressed compared to baseline.").ConfigureAwait(false);
+            }
+            await writer.WriteLineAsync().ConfigureAwait(false);
+        }
+
 
         string overallStatus = result.Passed ? "PASS" : "FAIL";
         await writer.WriteLineAsync($"QUALITY GATE: {overallStatus}").ConfigureAwait(false);

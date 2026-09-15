@@ -400,4 +400,104 @@ public sealed class CheckCommandTests
             if (File.Exists(tempBaseline)) File.Delete(tempBaseline);
         }
     }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenDiffScopeAndRatchetRegression_GeneratesFailedMarkdownAndJsonReports()
+    {
+        var tempBaseline = Path.GetTempFileName();
+        var artifactsBase = Path.Combine(Environment.CurrentDirectory, ".qualitygate", "artifacts");
+        var beforeDirs = Directory.Exists(artifactsBase)
+            ? Directory.GetDirectories(artifactsBase).ToHashSet()
+            : [];
+
+        try
+        {
+            var baselineJson = """
+            {
+              "schemaVersion": 1,
+              "commit": "main",
+              "timestamp": "2026-09-01T00:00:00Z",
+              "toolVersion": "1.0.0",
+              "metrics": {
+                "lineCoverage": 85.0,
+                "branchCoverage": 70.0,
+                "totalTests": 10,
+                "failedTests": 0,
+                "totalWarnings": 0,
+                "architectureViolations": 0,
+                "maxCyclomaticComplexity": 10
+              },
+              "features": {
+                "Channels": {
+                  "lineCoverage": 85.0,
+                  "branchCoverage": 70.0,
+                  "architectureViolations": 0,
+                  "maxComplexity": 10
+                }
+              }
+            }
+            """;
+            await File.WriteAllTextAsync(tempBaseline, baselineJson);
+
+            _gitService.GetChangeSetAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+                .Returns(new ChangeSet("base", "head", [new ChangedFile("backend/Features/Channels/ChannelDispatcher.cs", ChangeType.Modified)]));
+
+            var gate = Substitute.For<IQualityGate>();
+            gate.Name.Returns("Build");
+            gate.ExecuteAsync(Arg.Any<QualityContext>(), Arg.Any<CancellationToken>())
+                .Returns(GateResult.Pass("Build", "Build succeeded.", TimeSpan.FromSeconds(1)));
+
+            // Coverage drops to 80% (lower than baseline 85%)
+            var fileReport = new FileCoverageReport("backend/Features/Channels/ChannelDispatcher.cs", 100, 80, 0, 0, new Dictionary<int, LineCoverageInfo>());
+            var summary = new CoverageSummary(100, 80, 0, 0, new Dictionary<string, FileCoverageReport>
+            {
+                ["backend/Features/Channels/ChannelDispatcher.cs"] = fileReport
+            });
+            _coverageParser.ParseMultipleAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
+                .Returns(summary);
+
+            var exitCode = await CheckCommand.ExecuteAsync(
+                diff: true, ns: null, project: null, repository: false, baseRef: null,
+                format: "both", skip: [], only: [], failFast: false, verbose: false,
+                configPath: "qualitygate.json",
+                ratchet: true,
+                baselinePath: tempBaseline,
+                processRunner: _processRunner,
+                gitService: _gitService,
+                dotnetService: _dotnetService,
+                coverageParser: _coverageParser,
+                customGates: [gate]);
+
+            exitCode.Should().Be(1);
+
+            var afterDirs = Directory.GetDirectories(artifactsBase).ToHashSet();
+            afterDirs.ExceptWith(beforeDirs);
+            afterDirs.Should().ContainSingle();
+
+            var newRunDir = afterDirs.Single();
+            var mdPath = Path.Combine(newRunDir, "report.md");
+            var jsonPath = Path.Combine(newRunDir, "report.json");
+
+            File.Exists(mdPath).Should().BeTrue();
+            File.Exists(jsonPath).Should().BeTrue();
+
+            var mdContent = await File.ReadAllTextAsync(mdPath);
+            mdContent.Should().Contain("> **Status:** ❌ **FAILED**");
+            mdContent.Should().Contain("## Quality Ratchet Verification");
+            mdContent.Should().Contain("> **Status:** ❌ **FAILED** — Quality metrics have regressed compared to baseline.");
+            mdContent.Should().Contain("Ratchet.FeatureCoverage");
+
+            var jsonContent = await File.ReadAllTextAsync(jsonPath);
+            using var doc = System.Text.Json.JsonDocument.Parse(jsonContent);
+            var root = doc.RootElement;
+            root.GetProperty("passed").GetBoolean().Should().BeFalse();
+            root.GetProperty("ratchet").GetProperty("passed").GetBoolean().Should().BeFalse();
+
+            try { Directory.Delete(newRunDir, recursive: true); } catch { }
+        }
+        finally
+        {
+            if (File.Exists(tempBaseline)) File.Delete(tempBaseline);
+        }
+    }
 }

@@ -10,7 +10,8 @@ public static class ResultAggregator
         TimeSpan duration,
         string toolVersion,
         string runId,
-        ChangeSet? changeSet = null)
+        ChangeSet? changeSet = null,
+        RatchetEvaluationResult? ratchet = null)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(gateResults);
@@ -24,6 +25,7 @@ public static class ResultAggregator
             duration,
             toolVersion,
             runId,
-            changeSet);
+            changeSet,
+            ratchet);
     }
 }

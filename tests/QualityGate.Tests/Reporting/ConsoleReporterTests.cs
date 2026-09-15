@@ -62,4 +62,32 @@ public sealed class ConsoleReporterTests
         output.Should().Contain("- .artifacts/report.json");
         output.Should().Contain("- .artifacts/report.md");
     }
+
+    [Fact]
+    public async Task ReportAsync_WhenRatchetPresent_OutputsRatchetSectionAndOverallStatus()
+    {
+        var target = QualityTarget.ForDiff();
+        var gates = new List<GateResult>
+        {
+            GateResult.Pass("Build", "Build succeeded.", TimeSpan.FromSeconds(1))
+        };
+        var ratchetResult = new QualityGate.Application.RatchetEvaluationResult(
+            Passed: false,
+            Findings: [new GateFinding("Ratchet.FeatureCoverage", "Coverage drop", "Error")],
+            Summaries: ["❌ Line coverage for feature 'Channels' decreased by 0.7%."]);
+
+        var qualityResult = new QualityResult(true, target, gates, TimeSpan.FromSeconds(2), "1.0.0", "run-12345678", null, ratchetResult);
+
+        var reporter = new ConsoleReporter(".artifacts/report.json");
+        var sb = new StringBuilder();
+        using var writer = new StringWriter(sb);
+
+        await reporter.ReportAsync(qualityResult, writer);
+
+        var output = sb.ToString();
+        output.Should().Contain("QUALITY RATCHET VERIFICATION:");
+        output.Should().Contain("❌ Line coverage for feature 'Channels' decreased by 0.7%.");
+        output.Should().Contain("❌ RATCHET VIOLATION: Quality metrics have regressed compared to baseline.");
+        output.Should().Contain("QUALITY GATE: FAIL");
+    }
 }

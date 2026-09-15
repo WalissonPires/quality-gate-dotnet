@@ -55,6 +55,24 @@ public sealed class JsonReporter : IReporter
                     Head = result.ChangeSet.HeadCommit
                 }
                 : null,
+            Ratchet = result.Ratchet != null
+                ? new RatchetReportDto
+                {
+                    Passed = result.Ratchet.Passed,
+                    Summaries = result.Ratchet.Summaries.ToList(),
+                    Findings = result.Ratchet.Findings.Select(f => new FindingReportDto
+                    {
+                        Rule = f.Rule,
+                        File = f.File,
+                        Member = f.Member,
+                        Line = f.Line,
+                        Message = f.Message,
+                        Severity = f.Severity,
+                        Actual = f.Actual,
+                        Threshold = f.Threshold
+                    }).ToList()
+                }
+                : null,
             DurationMs = (long)result.Duration.TotalMilliseconds,
             Gates = result.Gates.Select(g => new GateReportDto
             {
@@ -90,6 +108,7 @@ public sealed class QualityReportDto
     public GitDto? Git { get; set; }
     public long DurationMs { get; set; }
     public List<GateReportDto> Gates { get; set; } = [];
+    public RatchetReportDto? Ratchet { get; set; }
 }
 
 public sealed class ToolDto
@@ -132,4 +151,11 @@ public sealed class FindingReportDto
     public string Severity { get; set; } = "Error";
     public decimal? Actual { get; set; }
     public decimal? Threshold { get; set; }
+}
+
+public sealed class RatchetReportDto
+{
+    public bool Passed { get; set; }
+    public List<string> Summaries { get; set; } = [];
+    public List<FindingReportDto> Findings { get; set; } = [];
 }
